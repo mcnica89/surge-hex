@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Surge Hex</title>
+<script>
+  // Apply the saved colour theme before the page draws, so it never flashes the wrong one (dark by default)
+  (function () {
+    var t = "dark";
+    try { var s = JSON.parse(localStorage.getItem("surgehex-settings-v1") || "null"); if (s && s.theme) t = s.theme; } catch (e) {}
+    if (t !== "system") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Unbounded:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #E9EDEF; --panel: #F7F9FA; --ink: #1A2127; --muted: #5C6870; --line: #C8D0D5;
+  --cell: #D2D9DD; --hot: #F2CC3E; --pip: #2E3A43; --red: #C42F3B; --blue: #2356B5;
+  --spark: #E3A800; --spark-soft: #F7E39A; --stone-hi: rgba(255,255,255,.28);
+  --ui: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --display: "Unbounded", "Arial Black", "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0F1417; --panel: #172026; --ink: #E6EBEE; --muted: #91A0A9; --line: #2B3740;
+    --cell: #25313A; --hot: #A07A06; --pip: #F3F5F7; --red: #E0505B; --blue: #4B83E8;
+    --spark: #FFD02E; --spark-soft: #5A4A10; --stone-hi: rgba(255,255,255,.22);
+  }
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F1417; --panel: #172026; --ink: #E6EBEE; --muted: #91A0A9; --line: #2B3740;
+  --cell: #25313A; --hot: #A07A06; --pip: #F3F5F7; --red: #E0505B; --blue: #4B83E8;
+  --spark: #FFD02E; --spark-soft: #5A4A10; --stone-hi: rgba(255,255,255,.22);
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 500 16px/1.45 var(--ui); font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+button, select, input { font: inherit; color: inherit; }
+html { touch-action: manipulation; } /* no double-tap zoom swallowing quick taps */
+.wrap { max-width: 1120px; margin: 0 auto; padding: 14px 14px 28px; }
+header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+h1 { font: 800 1.45rem/1 var(--display); letter-spacing: -0.02em; margin: 0; flex: 1; white-space: nowrap; }
+@media (max-width: 420px) { h1 { font-size: 1.15rem; } header .btn { padding: 7px 11px; } }
+.btn {
+  border: 1.5px solid var(--line); background: var(--panel); border-radius: 10px;
+  padding: 8px 14px; font-weight: 600; cursor: pointer; min-height: 40px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2.5px solid var(--spark); outline-offset: 2px; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.swap { border-color: var(--spark); background: var(--spark-soft); }
+.btn:disabled { opacity: .45; cursor: default; }
+
+main { display: grid; gap: 14px; grid-template-columns: 1fr; grid-template-areas: "meters" "msg" "board" "status" "log"; }
+@media (min-width: 900px) {
+  main { grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "board meters" "board msg" "board status" "board log"; align-items: start; grid-template-rows: auto auto auto 1fr; }
+}
+.meters { grid-area: meters; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (min-width: 900px) { .meters { grid-template-columns: 1fr; } }
+
+.meter {
+  background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  position: relative; transition: border-color .2s;
+}
+.meter.active { border-color: var(--pc); box-shadow: inset 0 0 0 1px var(--pc); }
+.meter .who { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.meter .chip { width: 14px; height: 14px; border-radius: 50%; background: var(--pc); flex: none; }
+.meter .side { font-weight: 500; color: var(--muted); font-size: .85rem; }
+.meter .count { margin-left: auto; font: 700 1.05rem/1 var(--display); white-space: nowrap; }
+.meter .who > span:nth-child(2) { white-space: nowrap; }
+.meter .count small { font: 500 .8rem var(--ui); color: var(--muted); }
+.meter .tag { position: absolute; top: -10px; right: 10px; box-shadow: 0 0 0 2px var(--bg); }
+.cells { display: flex; gap: 2px; margin-top: 9px; height: 12px; }
+.cells i { flex: 1; border-radius: 2px; background: var(--line); transform: skewX(-18deg); }
+.cells i.on { background: var(--spark); }
+.meter.charged .cells i.on { box-shadow: 0 0 6px var(--spark); }
+.bar { margin-top: 9px; height: 12px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar b { display: block; height: 100%; background: var(--spark); }
+.tag {
+  display: inline-block; font-size: .74rem; font-weight: 700; line-height: 1.5;
+  padding: 0 7px; border-radius: 999px; background: var(--spark-soft); color: var(--ink);
+}
+
+.board-wrap { grid-area: board; position: relative; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 8px; overflow-x: auto; }
+#board { display: block; width: 100%; height: auto; max-height: max(320px, calc(100dvh - 262px)); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+@media (min-width: 900px) { #board { max-height: max(420px, calc(100dvh - 84px)); } .board-wrap { padding: 4px 8px; } }
+@media (max-width: 600px) {
+  .wrap { padding: 10px 8px 24px; }
+  .board-wrap { margin: 0 -8px; padding: 4px 2px; border-radius: 0; border-left: 0; border-right: 0; }
+}
+#board .cell polygon { stroke: transparent; stroke-width: 2; transition: stroke .12s; }
+#board.can-play .cell.empty { cursor: pointer; }
+#board.can-play .cell.empty:hover polygon { stroke: var(--me); stroke-width: 2.5; }
+#board .pip, #board .num, #board .mark, #board text { pointer-events: none; }
+#board .num { font: 700 11px var(--ui); fill: var(--pip); text-anchor: middle; dominant-baseline: central; }
+#board .label { font: 600 9px var(--ui); fill: var(--muted); text-anchor: middle; dominant-baseline: central; }
+
+.flash {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font: 800 clamp(2.4rem, 9vw, 4.6rem)/1 var(--display); letter-spacing: -0.03em;
+  color: var(--fc); text-shadow: 0 0 18px var(--spark), 0 0 2px var(--panel);
+  opacity: 0;
+}
+.flash.go { animation: surge .95s ease-out; }
+@keyframes surge {
+  0% { opacity: 0; transform: scale(.7); }
+  18% { opacity: 1; transform: scale(1.06); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes surge { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+.status { grid-area: status; background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; }
+.msgbar { grid-area: msg; margin: -6px 0; padding: 0 4px; }
+.msgrow { display: flex; align-items: center; gap: 10px; }
+.msgbar .btn { flex: none; min-height: 30px; padding: 3px 12px; }
+.replay .btns { display: flex; gap: 8px; flex-wrap: wrap; flex-basis: 100%; }
+.replay:not([hidden]) + .record { border-top: 0; margin-top: 0; padding-top: 0; }
+.replay .ok { align-self: center; color: var(--muted); font-size: .84rem; }
+#msg { font-weight: 700; font-size: 1.05rem; min-height: 1.5em; }
+#sub { color: var(--muted); font-size: .9rem; }
+#sub:empty { display: none; }
+.progress { height: 3px; background: var(--line); border-radius: 2px; margin-top: 4px; overflow: hidden; visibility: hidden; }
+.progress.on { visibility: visible; }
+.progress b { display: block; height: 100%; width: 0; background: var(--muted); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.status-top { display: flex; gap: 12px; align-items: flex-start; }
+.status-text { flex: 1; min-width: 0; }
+.status-top .btn { flex: none; }
+.replay { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.replay[hidden] { display: none; }
+.replay input[type=range] { flex: 1 1 160px; min-width: 120px; accent-color: var(--ink); height: 28px; }
+.replay .lbl { font-size: .85rem; color: var(--muted); min-width: 7.5em; }
+.btn.sm { min-height: 34px; padding: 5px 11px; font-size: .9rem; }
+.log li[data-step] { cursor: pointer; }
+.seedpanel { display: grid; gap: 8px; padding-bottom: 12px; font-size: .92rem; }
+.seedpanel .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.seedpanel .seed { font: 700 1.05rem var(--display); letter-spacing: .04em; }
+.seedpanel label { font-weight: 700; margin-top: 6px; }
+.seedpanel textarea, .log textarea.rec { width: 100%; border: 1.5px solid var(--line); border-radius: 9px; background: var(--bg); padding: 8px 10px; font: 500 .88rem/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); resize: vertical; }
+.recrow { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; padding: 4px 0 12px; }
+.recrow .hint { flex-basis: 100%; margin: 0; color: var(--muted); font-size: .84rem; }
+.recrow .ok { color: var(--muted); font-size: .84rem; }
+.log textarea.rec[hidden] { display: none; }
+.seedpanel .hint { color: var(--muted); font-size: .84rem; margin: 0; }
+.seedpanel .ok { color: var(--muted); font-size: .84rem; }
+.aiinfo { padding-top: 0; }
+.credits { margin-top: 18px; text-align: center; color: var(--muted); font-size: .85rem; }
+.credits b { color: var(--ink); font-weight: 600; }
+.seedhow { margin-top: 8px; border-top: 1px solid var(--line); min-width: 0; }
+main > * { min-width: 0; } /* let wide content (the code sample) scroll inside its box instead of widening the page */
+.seedhow summary { cursor: pointer; font-weight: 700; padding: 10px 0 6px; }
+.seedhow p { margin: 0 0 8px; max-width: 70ch; }
+.seedhow pre { margin: 0 0 10px; overflow-x: auto; background: var(--bg); border: 1.5px solid var(--line); border-radius: 9px; padding: 10px 12px; font: 500 .78rem/1.45 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
+.log li.viewing { background: var(--spark-soft); }
+#gifDlg .gif-body { padding: 18px; display: grid; gap: 12px; }
+#gifDlg img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 8px; background: var(--bg); }
+#gifDlg img[hidden] { display: none; }
+
+.log { grid-area: log; background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; padding: 4px 12px; }
+.log summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.log ol { list-style: none; margin: 0 0 8px; padding: 0; max-height: 260px; overflow-y: auto; font-size: .92rem; }
+.log li { display: flex; gap: 8px; align-items: center; padding: 3px 0; border-top: 1px solid var(--line); }
+.log li .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.log li .n { color: var(--muted); width: 2.2em; }
+.log li .e { color: var(--muted); }
+.log li .t { margin-left: auto; font-size: .78rem; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--spark-soft); }
+.rules { font-size: .94rem; color: var(--ink); padding-bottom: 10px; }
+.howto { background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; padding: 4px 12px; margin-bottom: 14px; }
+.howto summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.rules a { color: inherit; text-decoration-thickness: 1.5px; text-underline-offset: 2px; }
+.rules h4 { margin: 14px 0 4px; font: 700 1rem/1.3 var(--ui); }
+.rules h4:first-child { margin-top: 4px; }
+.rules .pics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 12px; max-width: 460px; }
+.rules figure { margin: 0; text-align: center; }
+.rules figure svg { display: block; width: 100%; height: auto; }
+.rules figcaption { font-size: .82rem; color: var(--muted); margin-top: 2px; }
+.rules .single { max-width: 280px; margin: 8px 0 12px; }
+.surge-demo { max-width: 300px; margin: 8px 0 12px; }
+.surge-demo .sd-row { display: flex; justify-content: space-between; gap: 8px; font-size: .85rem; color: var(--muted); margin-top: 8px; }
+.surge-demo .sd-row b { color: var(--ink); }
+.mm-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 360px; margin: 8px 0 10px; }
+.mm { border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 8px; background: var(--panel); }
+.mm .who { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: .82rem; }
+.mm .chip { width: 10px; height: 10px; border-radius: 50%; background: var(--pc); flex: none; }
+.mm .count { margin-left: auto; font-weight: 700; white-space: nowrap; }
+.mm .count small { color: var(--muted); font-weight: 500; }
+.mm .cells, .mm .bar { height: 8px; margin-top: 6px; }
+.rules .cap { font-size: .82rem; color: var(--muted); margin: 2px 0 10px; }
+.rules .tips { margin-top: 6px; border-top: 1px solid var(--line); }
+.rules .tips summary { cursor: pointer; font-weight: 700; padding: 10px 0 6px; }
+.surge-ex { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 460px; margin: 8px 0 12px; }
+.surge-ex figure { display: grid; gap: 4px; align-content: start; }
+.surge-ex figcaption { text-align: left; font-weight: 700; color: var(--ink); font-size: .85rem; margin: 0 0 2px; line-height: 1.3; }
+.rules p { margin: 0 0 8px; max-width: 70ch; }
+.stats { padding-bottom: 12px; }
+.stats h3 { font: 700 .92rem/1.3 var(--ui); margin: 8px 0 2px; display: flex; gap: 8px; align-items: baseline; }
+.stats h3 span { margin-left: auto; font: 700 .95rem var(--display); }
+.stats .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin-bottom: 2px; }
+.stats .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+.stats .note { color: var(--muted); font-size: .86rem; margin: 4px 0 0; }
+.chart { display: block; width: 100%; height: auto; }
+.chart text { font: 500 9.5px var(--ui); fill: var(--muted); }
+
+dialog {
+  border: 1.5px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--ink);
+  padding: 0; width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 40px);
+}
+dialog::backdrop { background: rgba(10, 14, 17, .5); }
+dialog form { padding: 18px; display: grid; gap: 14px; }
+dialog h2 { font: 700 1.15rem var(--display); margin: 0; }
+.field { display: grid; gap: 4px; }
+.field label, .field .lbl { font-weight: 700; font-size: .95rem; }
+.field .hint { color: var(--muted); font-size: .84rem; }
+.field input[type=text], .field input[type=number], .field select {
+  border: 1.5px solid var(--line); border-radius: 9px; background: var(--bg); padding: 8px 10px; min-height: 42px; width: 100%;
+}
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: .95rem; }
+.check input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--ink); flex: none; }
+.err { color: var(--red); font-weight: 700; font-size: .9rem; min-height: 1.2em; }
+.dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.custom-wrap { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.custom-wrap > .hint, .custom-box > .hint { margin: -4px 0 0; color: var(--muted); font-size: .84rem; }
+.custom-box { display: grid; gap: 14px; padding-top: 4px; }
+.ai-box { display: grid; gap: 14px; }
+.ai-box[hidden] { display: none; }
+.custom-box[hidden], .custom-wrap > .hint[hidden] { display: none; }
+.rules b { color: var(--ink); }
+.roll { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; }
+.record { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; display: flex; gap: 6px 16px; flex-wrap: wrap; }
+.record b { color: var(--ink); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="howto">
+    <details id="howtoBox" open>
+      <summary>How to play Surge Hex</summary>
+      <div class="rules" id="rulesText"></div>
+    </details>
+  </section>
+  <header>
+    <h1>Surge Hex</h1>
+    <button class="btn" id="btnSettings" type="button">Settings</button>
+    <button class="btn" id="btnNew" type="button">New game</button>
+  </header>
+  <main>
+    <section class="meters" aria-label="Energy">
+      <div class="meter" id="meter0"></div>
+      <div class="meter" id="meter1"></div>
+    </section>
+    <section class="msgbar">
+      <div class="msgrow">
+        <div class="status-text" aria-live="polite">
+          <div id="msg"></div>
+          <div id="sub"></div>
+        </div>
+        <button class="btn sm" id="btnUndo" type="button">Undo</button>
+      </div>
+      <div class="progress" id="progress"><b></b></div>
+    </section>
+    <section class="board-wrap">
+      <svg id="board" role="grid" aria-label="Hex board"></svg>
+      <div class="flash" id="flash" aria-hidden="true">Surge!</div>
+    </section>
+    <section class="status">
+      <div class="replay" id="replay" hidden>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Rewind through the game">
+        <span class="lbl" id="scrubLbl"></span>
+        <div class="btns">
+          <button class="btn sm" id="btnLive" type="button" hidden>Back to live</button>
+          <button class="btn sm primary" id="btnFromHere" type="button" hidden>Play from here</button>
+          <button class="btn sm" id="btnGif" type="button">Save replay GIF</button>
+          <button class="btn sm" id="btnCopyRec2" type="button">Copy game record</button>
+          <span class="ok" id="recOk2"></span>
+          <button class="btn sm swap" id="btnSwap" type="button" hidden>Swap for the mirrored hex</button>
+        </div>
+      </div>
+      <div class="record" id="record"></div>
+    </section>
+    <section class="log">
+      <details open>
+        <summary>This game’s moves</summary>
+        <ol id="log"></ol>
+        <div class="recrow">
+          <button class="btn sm" id="btnCopyRec" type="button">Copy game record</button><span class="ok" id="recOk"></span>
+          <p class="hint">Copies the seed, settings and moves as text. Paste it into “Seeds and saved games” to replay this game.</p>
+          <textarea class="rec" id="recOut" rows="6" readonly hidden aria-label="This game’s record"></textarea>
+        </div>
+      </details>
+      <details id="statsBox">
+        <summary>This game’s stats</summary>
+        <div class="stats" id="stats"></div>
+      </details>
+      <details id="seedBox">
+        <summary>Seeds and saved games</summary>
+        <div class="seedpanel">
+          <div class="row"><span>This game’s seed: <span class="seed" id="seedVal"></span></span><button class="btn sm" id="btnCopySeed" type="button">Copy seed</button><span class="ok" id="seedOk"></span></div>
+          <label for="recIn">Play a seed or a game record</label>
+          <textarea id="recIn" rows="4" placeholder="Paste a seed such as 482913, or a whole game record" autocomplete="off" spellcheck="false"></textarea>
+          <p class="hint">A seed gives the same board whenever the board size and rules match. A game record also sets those and replays its moves.</p>
+          <div class="err" id="recErr"></div>
+          <div class="row"><button class="btn sm primary" id="btnLoad" type="button">Start this game</button></div>
+          <details class="seedhow">
+            <summary>How the seed works</summary>
+            <p>The seed only decides how much energy each hexagon holds. Who moves first and the AI’s moves are not taken from it, which is why a game record lists its moves.</p>
+            <p><b>1. The seed is a number.</b> New games get a random 6-digit whole number, such as 482913. You can also type any whole number up to 9 digits.</p>
+            <p><b>2. Make random numbers.</b> The seed is used directly as the starting state of a Mulberry32 generator, which returns numbers from 0 up to (but not including) 1.</p>
+            <p><b>3. Fill the board.</b> Hexagons are filled row by row, starting at a1, b1, c1… then a2, b2, and so on. Letters count columns from the blue edge on the left, and numbers count rows from the red edge at the top. Each hexagon takes the next random number r and gets the energy value at position floor(r × count) in the list of energy values, in the order written (1,2,3 in the standard rules, or your custom list). With the mirror option on, a hexagon whose column comes before its row (such as a2) copies the hexagon with row and column swapped (b1) and uses no random number.</p>
+            <p>Here is the same thing in JavaScript:</p>
+<pre><code>function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a &gt;&gt;&gt; 15), 1 | a);
+    t = (t + Math.imul(t ^ (t &gt;&gt;&gt; 7), 61 | t)) ^ t;
+    return ((t ^ (t &gt;&gt;&gt; 14)) &gt;&gt;&gt; 0) / 4294967296;
+  };
+}
+
+const rand = mulberry32(482913);    // the seed
+const values = [1, 2, 3];          // energy values, in order
+for (let row = 0; row &lt; N; row++)
+  for (let col = 0; col &lt; N; col++)
+    energy[row][col] = mirrored &amp;&amp; col &lt; row
+      ? energy[col][row]
+      : values[Math.floor(rand() * values.length)];</code></pre>
+            <p><b>Check your version.</b> With the standard rules on a 9×9 board, the seed 482913 gives a top row (a1 to i1) of 1 3 3 2 3 3 1 1 3 energy.</p>
+          </details>
+        </div>
+      </details>
+      <details id="aiBoxInfo">
+        <summary>How the AI works</summary>
+        <div class="rules aiinfo">
+          <p>The AI chooses its moves with a method called <i>Monte Carlo tree search</i> (MCTS). To decide on a move, the AI plays many quick practice games against itself, starting from the current position. In these practice games, the moves are mostly chosen at random. Each practice game is called a <i>rollout</i>. Rollouts follow the full rules of Surge Hex, including energy and surges.</p>
+          <p>After each rollout, the AI notes which player won. Moves that lead to more wins get tried more often, and moves that keep losing get tried less often. When the AI has finished all its rollouts, it plays the move it found most promising in the simulations.</p>
+          <p>The AI also uses two tricks to learn faster. The first trick is called RAVE (Rapid Action Value Estimation). With RAVE, the AI learns from every move played in a rollout, not just the first one. The second trick makes the rollouts look more like real Hex. When a rollout attacks one of a player’s bridges, that player always defends it.</p>
+          <p>The more rollouts the AI plays before each move, the stronger and slower it gets. Easy uses 500 rollouts per move, Medium uses 3,000, Hard uses 12,000 and Very hard uses 40,000. A “+” after a level, as in Hard+, means the AI is using more rollouts than that level but fewer than the next one.</p>
+          <p>To see how MCTS works in more detail, watch Mihai Nica’s <a href="https://youtu.be/uQUsAndESdQ" target="_blank" rel="noopener">explainer video on MCTS</a>.</p>
+        </div>
+      </details>
+    </section>
+  </main>
+  <footer class="credits"><b>AI disclosure:</b> Game design by Mihai Nica based on the classic game Hex. Coding by Claude Opus 5.5.</footer>
+</div>
+
+<dialog id="gifDlg">
+  <div class="gif-body">
+    <h2>Replay GIF</h2>
+    <img id="gifImg" alt="Animated replay of this game" hidden>
+    <p class="hint" id="gifMsg"></p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="btnGifClose">Close</button>
+      <button class="btn primary" type="button" id="btnGifSave" disabled>Save GIF</button>
+    </div>
+  </div>
+</dialog>
+<dialog id="dlg">
+  <form method="dialog" id="form">
+    <h2>Settings</h2>
+    <div class="field">
+      <label for="fMode">Opponent</label>
+      <select id="fMode">
+        <option value="ai">The AI</option>
+        <option value="local">Another person on this device</option>
+      </select>
+    </div>
+    <div class="ai-box" id="aiBox">
+    <div class="field">
+      <label for="fRoll">AI strength (rollouts per move)</label>
+      <div class="roll">
+        <input type="number" id="fRoll" min="100" max="200000" step="100" inputmode="numeric">
+        <select id="fPreset" aria-label="Preset">
+          <option value="">Custom</option>
+          <option value="500">Easy (500)</option>
+          <option value="3000">Medium (3,000)</option>
+          <option value="12000">Hard (12,000)</option>
+          <option value="40000">Very hard (40,000)</option>
+        </select>
+      </div>
+      <span class="hint">More rollouts make a stronger but slower AI. Between 100 and 200,000.</span>
+    </div>
+    <label class="check"><input type="checkbox" id="fAdapt"><span>Adapt difficulty: add 500 rollouts each time you win, remove 500 each time you lose</span></label>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fFirst">Who moves first</label>
+        <select id="fFirst">
+          <option value="human">You</option>
+          <option value="ai">The AI</option>
+          <option value="random">Alternate</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fN">Board size</label>
+        <select id="fN"></select>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="fCoords"><span>Show board coordinates (a, b, c… and 1, 2, 3…)</span></label>
+    <div class="field">
+      <label for="fOrient">Hexagon shape</label>
+      <select id="fOrient">
+        <option value="flat">Flat-topped (board stands upright)</option>
+        <option value="pointy">Pointy-topped (board lies wide)</option>
+        <option value="diamond">Pointy-topped diamond (board stands tall)</option>
+        <option value="widediamond">Flat-topped diamond (board lies wide)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="fTheme">Colour theme</label>
+      <select id="fTheme">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="system">Match my device</option>
+      </select>
+    </div>
+    <div class="custom-wrap">
+      <label class="check"><input type="checkbox" id="fCustom"><span>Customize rules</span></label>
+      <p class="hint" id="stdHint">Standard rules: each hexagon holds 1 to 3 energy. When your energy reaches 10, you surge and place an extra piece. The second player starts with 5 energy.</p>
+      <div class="custom-box" id="customBox" hidden>
+        <div class="field">
+          <label for="fVals">Energy values</label>
+          <input type="text" id="fVals" inputmode="numeric" autocomplete="off">
+          <span class="hint">Comma-separated whole numbers from 0 to 9. Each hexagon gets one at random. Repeat a value to make it more common.</span>
+        </div>
+        <div class="field">
+          <label for="fX">Surge at</label>
+          <input type="number" id="fX" min="1" max="99" step="1">
+        </div>
+        <div class="field">
+          <label for="fP2">2nd player starting energy</label>
+          <input type="number" id="fP2" min="0" max="99" step="1">
+          <span class="hint">Offsets the advantage of moving first. Simulations suggest about half the surge value.</span>
+        </div>
+        <div class="field">
+          <label for="fRule">When you surge</label>
+          <select id="fRule">
+            <option value="2">Reset to 0, then extra piece</option>
+            <option value="1">Extra piece, then reset to 0</option>
+            <option value="0">Subtract the surge value</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="fSym"><span>Mirror the energy layout so neither colour gets a better board</span></label>
+      </div>
+    </div>
+    <div class="err" id="fErr"></div>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="btnResetRecord" style="margin-right:auto">Reset record</button>
+      <button class="btn" type="button" id="btnCancel">Cancel</button>
+      <button class="btn primary" type="button" id="btnStart">Start new game</button>
+    </div>
+  </form>
+</dialog>
+<script>
+// ===== Surge Hex engine =====
+const RULE_SUB = 0, RULE_ZERO_AFTER = 1, RULE_ZERO_BEFORE = 2;
+const RING = [[0,1],[-1,1],[-1,0],[0,-1],[1,-1],[1,0]]; // neighbours in ring order
+
+function makeGeom(N) {
+  const NN = N * N, ring = new Int16Array(NN * 6);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) for (let k = 0; k < 6; k++) {
+    const rr = r + RING[k][0], cc = c + RING[k][1];
+    let v;
+    if (rr < 0 || rr >= N) v = -1;        // Red's edge (top/bottom)
+    else if (cc < 0 || cc >= N) v = -2;   // Blue's edge (left/right)
+    else v = rr * N + cc;
+    ring[(r * N + c) * 6 + k] = v;
+  }
+  return { N, NN, ring };
+}
+
+// Mutates st = {board, e:[e0,e1], toMove, bonus}. Returns true if the move triggered a surge.
+function applyMove(st, cell, rules) {
+  const p = st.toMove, v = rules.vals[cell];
+  st.board[cell] = p;
+  let e = st.e[p], surge = false;
+  if (rules.rule === RULE_ZERO_AFTER) {
+    if (st.bonus) { e += v; e = 0; }
+    else { e += v; if (e >= rules.X) surge = true; }
+  } else {
+    e += v;
+    if (e >= rules.X) { surge = true; e = rules.rule === RULE_SUB ? e - rules.X : 0; }
+  }
+  st.e[p] = e;
+  if (surge) st.bonus = true; else { st.toMove = 1 - p; st.bonus = false; }
+  return surge;
+}
+
+// Returns the winning path for player p (the shortest chain of their pieces joining
+// their two edges, as an array of cells), or null if they haven't connected.
+function winningGroup(board, p, geom) {
+  const { N, NN, ring } = geom;
+  const prev = new Int32Array(NN).fill(-2), queue = [];
+  for (let i = 0; i < N; i++) {
+    const cell = p === 0 ? i : i * N;
+    if (board[cell] === p) { prev[cell] = -1; queue.push(cell); }
+  }
+  for (let qi = 0; qi < queue.length; qi++) {
+    const x = queue[qi], r = (x / N) | 0, c = x % N;
+    if ((p === 0 && r === N - 1) || (p === 1 && c === N - 1)) {
+      const path = [];
+      for (let y = x; y >= 0; y = prev[y]) path.push(y);
+      return path;
+    }
+    for (let k = 0; k < 6; k++) {
+      const y = ring[x * 6 + k];
+      if (y >= 0 && prev[y] === -2 && board[y] === p) { prev[y] = x; queue.push(y); }
+    }
+  }
+  return null;
+}
+
+// ===== MCTS with RAVE and bridge-saving playouts =====
+function createSearcher(rules, geom, rootState) {
+  const { N, NN, ring } = geom;
+  const vals = rules.vals, X = rules.X, rule = rules.rule;
+  const EXPAND = 4, RAVE_K = 600, C = 0.12;
+  const wb = new Int8Array(NN), empt = new Int16Array(NN), pos = new Int16Array(NN), stk = new Int16Array(NN), seen = new Uint8Array(NN);
+  const pathN = [], pathI = new Int32Array(NN + 2);
+  let e0, e1, toMove, bonus, prevCell, prevPlayer;
+
+  function step(cell) {
+    const p = toMove; wb[cell] = p;
+    let e = p === 0 ? e0 : e1, surge = false;
+    if (rule === RULE_ZERO_AFTER) {
+      if (bonus) e = 0; else { e += vals[cell]; if (e >= X) surge = true; }
+    } else {
+      e += vals[cell];
+      if (e >= X) { surge = true; e = rule === RULE_SUB ? e - X : 0; }
+    }
+    if (p === 0) e0 = e; else e1 = e;
+    prevCell = cell; prevPlayer = p;
+    if (surge) bonus = true; else { toMove = 1 - p; bonus = false; }
+  }
+
+  function Node() {
+    let cnt = 0;
+    for (let i = 0; i < NN; i++) if (wb[i] < 0) cnt++;
+    this.moves = new Int16Array(cnt);
+    let k = 0;
+    for (let i = 0; i < NN; i++) if (wb[i] < 0) this.moves[k++] = i;
+    this.n = new Float32Array(cnt); this.w = new Float32Array(cnt);
+    this.an = new Float32Array(cnt); this.aw = new Float32Array(cnt);
+    this.kids = new Array(cnt);
+    this.N = 0; this.toMove = toMove;
+  }
+
+  function loadRoot() {
+    wb.set(rootState.board);
+    e0 = rootState.e[0]; e1 = rootState.e[1];
+    toMove = rootState.toMove; bonus = rootState.bonus;
+    prevCell = rootState.prevCell ?? -1; prevPlayer = rootState.prevPlayer ?? -1;
+  }
+
+  function own(x, p) { return x >= 0 ? wb[x] === p : (x === -1 ? p === 0 : p === 1); }
+
+  function redWins() {
+    seen.fill(0); let sp = 0;
+    for (let c = 0; c < N; c++) if (wb[c] === 0) { seen[c] = 1; stk[sp++] = c; }
+    const last = (N - 1) * N;
+    while (sp > 0) {
+      const x = stk[--sp];
+      if (x >= last) return true;
+      const b = x * 6;
+      for (let k = 0; k < 6; k++) {
+        const y = ring[b + k];
+        if (y >= 0 && !seen[y] && wb[y] === 0) { seen[y] = 1; stk[sp++] = y; }
+      }
+    }
+    return false;
+  }
+
+  function playout() {
+    let cnt = 0;
+    for (let i = 0; i < NN; i++) { if (wb[i] < 0) { pos[i] = cnt; empt[cnt++] = i; } else pos[i] = -1; }
+    while (cnt > 0) {
+      const p = toMove; let cell = -1;
+      if (prevPlayer !== p && prevCell >= 0) {
+        const b = prevCell * 6, s = (Math.random() * 6) | 0;
+        for (let t = 0; t < 6; t++) {
+          const k = (s + t) % 6, c = ring[b + k];
+          if (c < 0 || wb[c] >= 0) continue;
+          if (own(ring[b + (k + 5) % 6], p) && own(ring[b + (k + 1) % 6], p)) { cell = c; break; }
+        }
+      }
+      if (cell < 0) cell = empt[(Math.random() * cnt) | 0];
+      const ix = pos[cell], last = empt[--cnt];
+      empt[ix] = last; pos[last] = ix; pos[cell] = -1;
+      step(cell);
+    }
+    return redWins() ? 0 : 1;
+  }
+
+  function select(nd) {
+    const n = nd.n, w = nd.w, an = nd.an, aw = nd.aw, L = nd.moves.length;
+    const lnN = Math.log(nd.N + 1);
+    let best = 0, bv = -1e9;
+    for (let j = 0; j < L; j++) {
+      const nj = n[j], anj = an[j];
+      const aq = anj > 0 ? aw[j] / anj : 0.5;
+      let v;
+      if (nj === 0) v = aq + C * Math.sqrt(lnN);
+      else {
+        const beta = Math.sqrt(RAVE_K / (3 * nj + RAVE_K));
+        v = (1 - beta) * (w[j] / nj) + beta * aq + C * Math.sqrt(lnN / nj);
+      }
+      v += Math.random() * 1e-6;
+      if (v > bv) { bv = v; best = j; }
+    }
+    return best;
+  }
+
+  loadRoot();
+  const root = new Node();
+  let iterations = 0;
+
+  function iterate() {
+    loadRoot();
+    let node = root, depth = 0;
+    while (node.moves.length > 0) {
+      const i = select(node);
+      pathN[depth] = node; pathI[depth] = i; depth++;
+      step(node.moves[i]);
+      if (node.n[i] >= EXPAND) {
+        let k = node.kids[i];
+        if (!k) { k = new Node(); node.kids[i] = k; }
+        node = k;
+      } else break;
+    }
+    const winner = playout();
+    for (let d = 0; d < depth; d++) {
+      const nd = pathN[d], i = pathI[d], p = nd.toMove, win = winner === p ? 1 : 0;
+      nd.N++; nd.n[i]++; nd.w[i] += win;
+      const mv = nd.moves, an = nd.an, aw = nd.aw;
+      for (let j = 0; j < mv.length; j++) if (wb[mv[j]] === p) { an[j]++; aw[j] += win; }
+    }
+    iterations++;
+  }
+
+  function run(k) { for (let i = 0; i < k; i++) iterate(); }
+
+  function best() {
+    let bi = -1, bn = -1;
+    for (let j = 0; j < root.moves.length; j++) if (root.n[j] > bn) { bn = root.n[j]; bi = j; }
+    if (bi < 0) return null;
+    return { cell: root.moves[bi], winRate: root.n[bi] > 0 ? root.w[bi] / root.n[bi] : 0.5, visits: bn };
+  }
+
+  // For the pie rule: a reasonably explored move whose value is closest to even.
+  function balanced() {
+    let bi = -1, bd = 1e9;
+    for (let j = 0; j < root.moves.length; j++) {
+      if (root.n[j] < 12) continue;
+      const d = Math.abs(root.w[j] / root.n[j] - 0.5);
+      if (d < bd) { bd = d; bi = j; }
+    }
+    return bi < 0 ? null : { cell: root.moves[bi], winRate: root.w[bi] / root.n[bi] };
+  }
+
+  return { run, best, balanced, get iterations() { return iterations; } };
+}
+
+function findImmediateWin(state, rules, geom) {
+  const p = state.toMove;
+  for (let i = 0; i < geom.NN; i++) {
+    if (state.board[i] >= 0) continue;
+    state.board[i] = p;
+    const g = winningGroup(state.board, p, geom);
+    state.board[i] = -1;
+    if (g) return i;
+  }
+  return -1;
+}
+
+function generateValues(N, values, symmetric, rng = Math.random) {
+  const vals = new Int8Array(N * N);
+  const pick = () => values[(rng() * values.length) | 0];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (symmetric && c < r) vals[r * N + c] = vals[c * N + r];
+    else vals[r * N + c] = pick();
+  }
+  return vals;
+}
+// ===== UI =====
+const $ = s => document.querySelector(s);
+const SQ3 = Math.sqrt(3), R = 20;
+const LEVELS = { easy: 500, medium: 3000, hard: 12000, vhard: 40000 };
+const COLOR_NAME = ["Red", "Blue"];
+const DEFAULTS = { values: "1,2,3", X: 10, rule: 2, N: 9, rollouts: 3000, adapt: false, first: "human", pie: false, sym: false, est: true, p2start: 5, custom: false, coords: false, mode: "ai", orient: "flat", theme: "dark" };
+const STANDARD = { values: "1,2,3", X: 10, rule: 2, p2start: 5, sym: false };
+// The rules actually in force: the standard set unless custom rules are switched on
+function eff() { return settings.custom ? { ...settings } : { ...settings, ...STANDARD }; }
+const STORE_KEY = "surgehex-settings-v1";
+
+let settings = loadSettings();
+let geom, rules, game, history = [], aiToken = 0, thinking = false, progress = 0;
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (s && typeof s === "object") {
+      const out = { ...DEFAULTS, ...s, pie: false };
+      if (s.rollouts == null && s.level) out.rollouts = LEVELS[s.level] || 3000;
+      return out;
+    }
+  } catch (e) {}
+  return { ...DEFAULTS };
+}
+function saveSettings() { try { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); } catch (e) {} }
+const REC_KEY = "surgehex-record-v1";
+let record = loadRecord();
+function loadRecord() {
+  try {
+    const r = JSON.parse(localStorage.getItem(REC_KEY) || "null");
+    if (r && typeof r === "object") return { human: r.human | 0, ai: r.ai | 0, lastFirst: r.lastFirst ?? null };
+  } catch (e) {}
+  return { human: 0, ai: 0, lastFirst: null };
+}
+function saveRecord() { try { localStorage.setItem(REC_KEY, JSON.stringify(record)); } catch (e) {} }
+const fmt = n => Number(n).toLocaleString("en-US");
+// Difficulty in words: a preset's name, or the preset below it plus “+” when in between
+function levelName(n) {
+  if (n < 500) return "Very easy";
+  let name = "Easy";
+  for (const [v, nm] of [[500, "Easy"], [3000, "Medium"], [12000, "Hard"], [40000, "Very hard"]]) {
+    if (n === v) return nm;
+    if (n > v) name = nm + "+";
+  }
+  return name;
+}
+function parseValues(str) {
+  const parts = String(str).split(/[\s,;]+/).filter(Boolean);
+  if (!parts.length) return null;
+  const out = [];
+  for (const p of parts) { if (!/^\d+$/.test(p)) return null; const v = +p; if (v > 9) return null; out.push(v); }
+  return out;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const nextTick = () => new Promise(r => setTimeout(r, 0));
+const coord = i => String.fromCharCode(97 + i % geom.N) + (((i / geom.N) | 0) + 1);
+
+// ----- seeds: a short code that fixes the random energy layout -----
+function randomSeed() { return String(100000 + Math.floor(Math.random() * 900000)); } // 6 digits
+// A seed is a whole number (up to 9 digits); returns its canonical text, or null if it isn't one
+function normSeed(s) { const t = String(s).replace(/[\s,]+/g, ""); return /^\d{1,9}$/.test(t) ? String(Number(t)) : null; }
+function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+let nextGame = null; // one-off overrides for the next new game: { seed, first, moves }
+
+// ----- game lifecycle -----
+function newGame() {
+  const ov = nextGame || {}; nextGame = null;
+  const seed = (ov.seed && normSeed(ov.seed)) || randomSeed();
+  aiToken++; thinking = false;
+  const N = settings.N;
+  geom = makeGeom(N);
+  const E = eff();
+  const values = parseValues(E.values) || [1, 2, 3];
+  rules = { vals: generateValues(N, values, E.sym, mulberry32(Number(seed))), X: E.X, rule: E.rule };
+  renderRules(E, values);
+  let mn = 99, mx = -1;
+  for (const v of rules.vals) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+  rules.min = mn; rules.max = mx;
+  let first = 0, info = null;
+  if (ov.first === 0 || ov.first === 1) { first = ov.first; info = ov.moves && ov.moves.length ? `Loaded a game record (${ov.moves.length} moves).` : null; }
+  else if (settings.first === "ai") first = 1;
+  else if (settings.first === "random") {
+    if (record.lastFirst === 0 || record.lastFirst === 1) {
+      first = 1 - record.lastFirst;
+      info = settings.mode === "local" ? `Alternating: ${COLOR_NAME[first]} moves first this game.`
+        : first === 0 ? "Alternating: you move first this game." : "Alternating: the AI moves first this game.";
+    } else {
+      first = Math.random() < 0.5 ? 0 : 1;
+      info = settings.mode === "local" ? `Random draw: ${COLOR_NAME[first]} moves first.`
+        : first === 0 ? "Random draw: you move first." : "Random draw: the AI moves first.";
+    }
+    record.lastFirst = first; saveRecord();
+  }
+  game = {
+    st: { board: new Int8Array(N * N).fill(-1), e: first === 0 ? [0, E.p2start] : [E.p2start, 0], toMove: first, bonus: false, prevCell: -1, prevPlayer: -1 },
+    human: 0, first, seed, rollouts: settings.rollouts, mode: settings.mode, winner: -1, winGroup: null, surgeStones: [], lastMoves: [], lastPlayer: -1,
+    log: info ? [{ info }] : [],
+    moveNo: 0, pieDecided: !settings.pie, estimate: null,
+    stats: [{ n: 0, e: first === 0 ? [0, E.p2start] : [E.p2start, 0], est: null, surged: false, p: -1 }]
+  };
+  history = [];
+  viewStep = null;
+  if (ov.moves && ov.moves.length) {
+    // replay a loaded record quietly: no surge flashes, and no win or loss added to the record
+    game.loading = true;
+    for (const cell of ov.moves) { if (game.winner >= 0 || game.st.board[cell] >= 0) break; doMove(cell); }
+    game.loading = false;
+  }
+  render();
+  if (!isLocal() && game.winner < 0 && game.st.toMove !== game.human) runAI();
+}
+
+function snapshot() {
+  const g = game;
+  return {
+    st: { board: Int8Array.from(g.st.board), e: g.st.e.slice(), toMove: g.st.toMove, bonus: g.st.bonus, prevCell: g.st.prevCell, prevPlayer: g.st.prevPlayer },
+    human: g.human, first: g.first, seed: g.seed, rollouts: g.rollouts, mode: g.mode, winner: g.winner, winGroup: g.winGroup && g.winGroup.slice(), surgeStones: g.surgeStones.slice(),
+    lastMoves: g.lastMoves.slice(), lastPlayer: g.lastPlayer, log: g.log.slice(), moveNo: g.moveNo,
+    pieDecided: g.pieDecided, estimate: g.estimate,
+    stats: g.stats.map(x => ({ ...x, e: x.e.slice() }))
+  };
+}
+
+function doMove(cell, est = null) {
+  viewStep = null;
+  const st = game.st, p = st.toMove, v = rules.vals[cell], wasBonus = st.bonus;
+  const surged = applyMove(st, cell, rules);
+  st.prevCell = cell; st.prevPlayer = p;
+  game.moveNo++;
+  if (game.moveNo >= 2) game.pieDecided = true;
+  if (game.lastPlayer !== p) game.lastMoves = [];
+  game.lastMoves.push(cell); game.lastPlayer = p;
+  if (wasBonus) game.surgeStones.push(cell);
+  game.log.push({ p, cell, v, surged, bonus: wasBonus });
+  game.stats.push({ n: game.moveNo, e: st.e.slice(), est, surged, p, v });
+  const g = winningGroup(st.board, p, geom);
+  if (g) { game.winner = p; game.winGroup = g; if (!game.loading) finishGame(); }
+  else if (surged && !game.loading) flash(p);
+  if (!game.loading) render();
+}
+
+const isLocal = () => game.mode === "local";
+function isHumanTurn() { return game.winner < 0 && !thinking && (isLocal() || game.st.toMove === game.human); }
+function swapAvailable() {
+  return !game.pieDecided && game.moveNo === 1 && game.st.toMove === 1 - game.first && game.winner < 0;
+}
+
+// Pie rule, mirror version: the first stone is replaced by the second player's stone
+// on the mirrored hex, its energy goes with it, and the first player moves again.
+function applySwap(by, est = null) {
+  const st = game.st, first = game.first, second = 1 - first, N = geom.N;
+  const cell = game.log.find(l => !l.swap && !l.info).cell;
+  const m = (cell % N) * N + ((cell / N) | 0);
+  st.board[cell] = -1; st.board[m] = second;
+  st.e[second] = st.e[first]; st.e[first] = 0;
+  st.toMove = first; st.bonus = false; st.prevCell = m; st.prevPlayer = second;
+  game.pieDecided = true;
+  game.lastMoves = [m]; game.lastPlayer = second;
+  game.log.push({ swap: true, by, cell: m });
+  game.stats.push({ n: game.moveNo, e: st.e.slice(), est, surged: false, p: -1, v: 0, swap: true, from: first, to: second });
+  if (est != null) game.estimate = est;
+}
+
+function onCell(i) {
+  // Tapping the board while rewound jumps back to the live game instead of placing a piece
+  if (viewStep !== null) { viewStep = null; render(); return; }
+  if (!isHumanTurn() || game.st.board[i] >= 0) return;
+  // One undo takes back your whole turn, including a surge's bonus stone
+  if (!game.st.bonus || !history.length) history.push(snapshot());
+  game.pieDecided = game.pieDecided || game.moveNo >= 1;
+  doMove(i);
+  if (!isLocal() && game.winner < 0 && game.st.toMove !== game.human) runAI();
+}
+
+function onSwap() {
+  if (!isHumanTurn() || !swapAvailable()) return;
+  history.push(snapshot());
+  applySwap("You");
+  render();
+  runAI();
+}
+
+function finishGame() {
+  if (isLocal()) { game.result = null; return; } // two-player games don't count toward the record vs the AI
+  const humanWon = game.winner === game.human;
+  if (humanWon) record.human++; else record.ai++;
+  let delta = 0;
+  if (settings.adapt) {
+    const before = settings.rollouts;
+    settings.rollouts = Math.min(200000, Math.max(100, before + (humanWon ? 500 : -500)));
+    delta = settings.rollouts - before;
+    saveSettings();
+  }
+  game.result = { humanWon, delta };
+  saveRecord();
+}
+
+function onUndo() {
+  if (!history.length) return;
+  if (game.result) {
+    // Undoing out of a finished game takes back its result and any difficulty change
+    if (game.result.humanWon) record.human--; else record.ai--;
+    if (game.result.delta) { settings.rollouts -= game.result.delta; saveSettings(); }
+    saveRecord();
+  }
+  aiToken++; thinking = false;
+  game = history.pop();
+  viewStep = null;
+  render();
+}
+
+// ----- AI -----
+async function think(token, iters) {
+  const s = createSearcher(rules, geom, game.st);
+  let done = 0;
+  while (done < iters) {
+    const t0 = performance.now();
+    while (done < iters && performance.now() - t0 < 30) { const k = Math.min(100, iters - done); s.run(k); done += k; }
+    progress = done / iters; renderStatus();
+    await nextTick();
+    if (token !== aiToken) return null;
+  }
+  return s;
+}
+
+async function runAI() {
+  const token = ++aiToken;
+  thinking = true; progress = 0; render();
+  await sleep(220);
+  const iters = Math.max(100, Math.round(settings.rollouts) || 3000);
+  while (token === aiToken && game.winner < 0 && game.st.toMove !== game.human) {
+    // Pie rule: AI (Blue) decides whether to take Red's first stone
+    if (swapAvailable()) {
+      const s = await think(token, iters);
+      if (!s) return;
+      game.pieDecided = true;
+      const b = s.best();
+      if (b && b.winRate < 0.5) {
+        applySwap("AI", 1 - b.winRate);
+        render();
+        continue;
+      }
+      game.estimate = b.winRate;
+      doMove(b.cell, b.winRate);
+      if (game.winner < 0 && game.st.toMove !== game.human) await sleep(650);
+      continue;
+    }
+    let cell = findImmediateWin(game.st, rules, geom), est = 1;
+    if (cell < 0) {
+      const s = await think(token, iters);
+      if (!s) return;
+      const pieOpening = settings.pie && game.moveNo === 0;
+      const pick = (pieOpening && s.balanced()) || s.best();
+      cell = pick.cell; est = pick.winRate;
+    }
+    game.estimate = est;
+    doMove(cell, est);
+    if (game.winner < 0 && game.st.toMove !== game.human) await sleep(650);
+  }
+  if (token === aiToken) { thinking = false; render(); }
+}
+
+// ----- rendering -----
+let ROT = 30; // rotate 30° so Blue's two edges stand vertical (hexes become flat-topped)
+function center(r, c) {
+  const x = R * SQ3 * (c + r / 2), y = R * 1.5 * r;
+  if (!ROT) return [x, y];
+  const a = ROT * Math.PI / 180, co = Math.cos(a), si = Math.sin(a);
+  return [x * co - y * si, x * si + y * co];
+}
+function vert(r, c, deg, s = 1) { const [x, y] = center(r, c), a = (deg + ROT) * Math.PI / 180; return [x + s * R * Math.cos(a), y + s * R * Math.sin(a)]; }
+function pickOrientation() {
+  // 30° flat-topped upright, 0° pointy and wide, 60° tall pointy diamond, -30° wide flat diamond
+  return { pointy: 0, diamond: 60, widediamond: -30 }[settings.orient] ?? 30;
+}
+function hexPts(r, c, s) { return [-90, -30, 30, 90, 150, 210].map(d => vert(r, c, d, s).map(n => n.toFixed(2)).join(",")).join(" "); }
+const PIPS = {
+  1: [[0,0]], 2: [[-1,-1],[1,1]], 3: [[-1,-1],[0,0],[1,1]], 4: [[-1,-1],[1,-1],[-1,1],[1,1]],
+  5: [[-1,-1],[1,-1],[0,0],[-1,1],[1,1]], 6: [[-1,-1],[1,-1],[-1,0],[1,0],[-1,1],[1,1]]
+};
+
+function render() { renderBoard(); renderMeters(); renderStatus(); renderLog(); renderStats(); renderRecord(); }
+
+// The position to draw: the live game, or an earlier move while rewinding
+let viewStep = null;
+function moveCount() { return game.log.filter(L => L.cell != null && !L.swap).length; }
+function boardAt(k) {
+  const board = new Int8Array(geom.NN).fill(-1), moves = game.log.filter(L => L.cell != null && !L.swap);
+  for (let j = 0; j < k; j++) board[moves[j].cell] = moves[j].p;
+  // highlight the turn that ends at move k (a surge turn has two pieces)
+  const last = [];
+  for (let j = k - 1; j >= 0 && moves[j].p === moves[k - 1].p; j--) { last.push(moves[j].cell); if (!moves[j].bonus) break; }
+  return { board, lastMoves: last, winGroup: null, winner: -1, live: false, e: game.stats[k] ? game.stats[k].e : [0, 0] };
+}
+function boardView() {
+  if (viewStep === null) return { board: game.st.board, lastMoves: game.lastMoves, winGroup: game.winGroup, winner: game.winner, live: true, e: game.st.e };
+  return boardAt(viewStep);
+}
+function renderBoard() {
+  const { N } = geom, svg = $("#board"), V = boardView();
+  const pts = a => a.map(p => p.map(n => n.toFixed(2)).join(",")).join(" ");
+  const top = [], bot = [], left = [], right = [];
+  for (let c = 0; c < N; c++) { top.push(vert(0, c, -150), vert(0, c, -90)); bot.push(vert(N - 1, c, 150), vert(N - 1, c, 90)); }
+  top.push(vert(0, N - 1, -30)); bot.push(vert(N - 1, N - 1, 30));
+  for (let r = 0; r < N; r++) { left.push(vert(r, 0, -150), vert(r, 0, 150)); right.push(vert(r, N - 1, -30), vert(r, N - 1, 30)); }
+
+  ROT = pickOrientation();
+  const colLabel = c => center(-0.85, c + 0.425), rowLabel = r => center(r, -0.9);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const grow = ([x, y], pad) => { minX = Math.min(minX, x - pad); maxX = Math.max(maxX, x + pad); minY = Math.min(minY, y - pad); maxY = Math.max(maxY, y + pad); };
+  for (const [r, c] of [[0, 0], [0, N - 1], [N - 1, 0], [N - 1, N - 1]]) for (let d = -90; d < 270; d += 60) grow(vert(r, c, d), R * 0.18);
+  if (settings.coords) for (let k = 0; k < N; k++) { grow(colLabel(k), R * 0.42); grow(rowLabel(k), R * 0.42); }
+  svg.setAttribute("viewBox", `${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}`);
+  const meColor = isLocal() ? game.st.toMove : game.human;
+  svg.style.setProperty("--me", meColor === 0 ? "var(--red)" : "var(--blue)");
+  svg.classList.toggle("can-play", V.live && isHumanTurn());
+
+  const win = new Set(V.winGroup || []), last = new Set(V.lastMoves);
+  const span = Math.max(1, rules.max - rules.min);
+  let out = "";
+  if (settings.coords) {
+    for (let c = 0; c < N; c++) { const [x, y] = colLabel(c); out += `<text class="label" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${String.fromCharCode(97 + c)}</text>`; }
+    for (let r = 0; r < N; r++) { const [x, y] = rowLabel(r); out += `<text class="label" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${r + 1}</text>`; }
+  }
+  for (let i = 0; i < geom.NN; i++) {
+    const r = (i / N) | 0, c = i % N, [x, y] = center(r, c), owner = V.board[i], v = rules.vals[i];
+    const t = Math.round(((v - rules.min) / span) * 100);
+    out += `<g class="cell${owner < 0 ? " empty" : ""}" data-i="${i}" role="gridcell" aria-label="${coord(i)}, energy ${v}${owner >= 0 ? ", " + COLOR_NAME[owner] : ""}">`;
+    out += `<polygon points="${hexPts(r, c, 0.95)}" style="fill:color-mix(in oklab, var(--hot) ${owner < 0 ? t : Math.round(t * 0.5)}%, var(--cell))"/>`;
+    if (owner < 0) {
+      if (PIPS[v]) for (const [dx, dy] of PIPS[v]) out += `<circle class="pip" cx="${(x + dx * R * 0.32).toFixed(2)}" cy="${(y + dy * R * 0.32).toFixed(2)}" r="${(R * 0.105).toFixed(2)}" fill="var(--pip)"/>`;
+      else if (v > 0) out += `<text class="num" x="${x.toFixed(2)}" y="${y.toFixed(2)}">${v}</text>`;
+    } else {
+      const col = owner === 0 ? "var(--red)" : "var(--blue)";
+      out += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(R * 0.7).toFixed(2)}" fill="${col}"${win.has(i) ? ` stroke="var(--spark)" stroke-width="3"` : ""}/>`;
+      if (last.has(i) && V.winner < 0) out += `<circle class="mark" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(R * 0.84).toFixed(2)}" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-dasharray="3 2.4"/>`;
+    }
+    out += `</g>`;
+  }
+  const sw = (R * 0.28).toFixed(1);
+  out += `<polyline points="${pts(top)}" fill="none" stroke="var(--red)" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  out += `<polyline points="${pts(bot)}" fill="none" stroke="var(--red)" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  out += `<polyline points="${pts(left)}" fill="none" stroke="var(--blue)" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  out += `<polyline points="${pts(right)}" fill="none" stroke="var(--blue)" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  svg.innerHTML = out;
+}
+
+function minEmpty() {
+  let m = Infinity;
+  for (let i = 0; i < geom.NN; i++) if (game.st.board[i] < 0) m = Math.min(m, rules.vals[i]);
+  return m;
+}
+
+function playerName(p) { return isLocal() ? COLOR_NAME[p] : p === game.human ? "You" : "AI"; }
+function renderMeters() {
+  const st = game.st, X = rules.X, V = boardView();
+  for (const p of [0, 1]) {
+    const el = $("#meter" + p), e = V.e[p];
+    const surging = V.live && game.winner < 0 && st.toMove === p && st.bonus;
+    el.style.setProperty("--pc", p === 0 ? "var(--red)" : "var(--blue)");
+    el.classList.toggle("active", V.live && game.winner < 0 && st.toMove === p);
+    el.classList.toggle("charged", surging);
+    const who = playerName(p);
+    let bar;
+    if (X <= 30) { bar = `<div class="cells">`; for (let k = 0; k < X; k++) bar += `<i class="${k < e ? "on" : ""}"></i>`; bar += `</div>`; }
+    else bar = `<div class="bar"><b style="width:${Math.min(100, (e / X) * 100)}%"></b></div>`;
+    const tag = surging ? "Surging" : "";
+    el.setAttribute("aria-label", `${who}, ${COLOR_NAME[p]}: energy ${e} of ${X}${tag ? ", " + tag.toLowerCase() : ""}`);
+    el.innerHTML = `<div class="who"><span class="chip"></span><span>${who}</span>${tag ? `<span class="tag">${tag}</span>` : ""}<span class="count">${e}<small>/${X} energy</small></span></div>${bar}`;
+  }
+}
+
+function renderStatus() {
+  const msg = $("#msg"), sub = $("#sub"), st = game.st;
+  let m = "", s = "";
+  if (viewStep !== null) {
+    m = `Rewound to move ${viewStep}.`;
+    s = "";
+  } else if (isLocal()) {
+    if (game.winner >= 0) { m = `${COLOR_NAME[game.winner]} wins!`; }
+    else m = st.bonus ? `Surge! ${COLOR_NAME[st.toMove]} places another piece.` : `${COLOR_NAME[st.toMove]} to move.`;
+  } else if (game.winner >= 0) {
+    m = game.winner === game.human ? "You win!" : "The AI wins.";
+  } else if (thinking && st.toMove !== game.human) {
+    m = st.bonus ? "The AI surged and is choosing its extra piece…" : "The AI is thinking…";
+  } else if (st.toMove === game.human) {
+    m = st.bonus ? "Surge! Place another piece." : "Your move.";
+    if (swapAvailable()) s = "Or swap: the AI’s first stone becomes yours, on the mirrored hex.";
+  }
+  msg.textContent = m; sub.textContent = s;
+  const pr = $("#progress");
+  pr.classList.toggle("on", thinking);
+  pr.firstElementChild.style.width = (thinking ? progress * 100 : 0) + "%";
+  $("#btnUndo").disabled = history.length === 0;
+  renderReplay();
+  $("#btnSwap").hidden = !(isHumanTurn() && swapAvailable());
+}
+
+function renderLog() {
+  const ol = $("#log");
+  if (!game.log.length) { ol.innerHTML = `<li><span class="e">No pieces yet.</span></li>`; return; }
+  let html = "", n = 0;
+  const shown = viewStep === null ? -1 : viewStep;
+  game.log.forEach(L => {
+    if (L.info) { html = `<li><span class="n"></span><span class="e">${L.info}</span></li>` + html; return; }
+    if (L.swap) { html = `<li><span class="n"></span><span>${L.by === "You" ? "You" : "The AI"} swapped to ${coord(L.cell)}</span><span class="t">Swap</span></li>` + html; return; }
+    n++;
+    const tag = L.surged ? `<span class="t">Surge</span>` : L.bonus ? "" : "";
+    html = `<li data-step="${n}"${n === shown ? ` class="viewing"` : ""}><span class="n">${n}.</span><span class="dot" style="background:${L.p === 0 ? "var(--red)" : "var(--blue)"}"></span><span>${COLOR_NAME[L.p]} ${coord(L.cell)}</span><span class="e">+${L.v}</span>${tag}</li>` + html;
+  });
+  ol.innerHTML = html;
+}
+
+function renderStats() {
+  const box = $("#stats"), S = game.stats, X = rules.X;
+  const W = 300, H = 132, L = 34, RT = 8, T = 8, B = 20, pw = W - L - RT, ph = H - T - B;
+  const maxN = Math.max(10, S[S.length - 1].n);
+  const sx = n => (L + (n / maxN) * pw).toFixed(1);
+  const step = maxN <= 20 ? 5 : maxN <= 50 ? 10 : 20;
+  let xAxis = `<line x1="${L}" y1="${T + ph}" x2="${L + pw}" y2="${T + ph}" stroke="var(--line)"/>`;
+  for (let n = 0; n <= maxN; n += step) xAxis += `<text x="${sx(n)}" y="${H - 5}" text-anchor="middle">${n}</text>`;
+  const yLabel = (y, txt) => `<text x="${L - 5}" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="central">${txt}</text>`;
+  const hLine = (y, dashed) => `<line x1="${L}" y1="${y.toFixed(1)}" x2="${L + pw}" y2="${y.toFixed(1)}" stroke="var(--line)"${dashed ? ` stroke-dasharray="4 3"` : ""}/>`;
+  const who = p => playerName(p);
+  const lab = p => (isLocal() ? COLOR_NAME[p] : `${COLOR_NAME[p]} (${who(p)})`);
+  const pc = p => (p === 0 ? "var(--red)" : "var(--blue)");
+
+  // Energy vs stone
+  const maxE = Math.max(X, ...S.map(s => Math.max(s.e[0], s.e[1])));
+  const sy = v => T + ph - (v / maxE) * ph;
+  let en = hLine(sy(X), true) + yLabel(sy(X), X) + yLabel(sy(0), 0) + xAxis;
+  for (const p of [0, 1]) {
+    let d = `M${sx(S[0].n)},${sy(S[0].e[p]).toFixed(1)}`;
+    for (let k = 1; k < S.length; k++) d += ` H${sx(S[k].n)} V${sy(S[k].e[p]).toFixed(1)}`;
+    en += `<path d="${d}" fill="none" stroke="${pc(p)}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+  for (const s of S) if (s.surged) en += `<circle cx="${sx(s.n)}" cy="${sy(X).toFixed(1)}" r="3.6" fill="${pc(s.p)}" stroke="var(--spark)" stroke-width="1.8"/>`;
+
+  // AI win estimate vs stone
+  const pts = S.filter(s => s.est != null);
+  const sy2 = v => T + ph - v * ph;
+  let wc = hLine(sy2(0.5), true) + yLabel(sy2(1), "100%") + yLabel(sy2(0.5), "50%") + yLabel(sy2(0), "0%") + xAxis;
+  if (pts.length) {
+    wc += `<polyline points="${pts.map(s => `${sx(s.n)},${sy2(s.est).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const s of pts) wc += `<circle cx="${sx(s.n)}" cy="${sy2(s.est).toFixed(1)}" r="2.6" fill="var(--ink)"/>`;
+  }
+  const latest = pts.length ? `${Math.round(pts[pts.length - 1].est * 100)}%` : "";
+
+  // Total energy collected vs stone
+  const tot = [0, 0];
+  const cum = S.map(s => {
+    if (s.swap) { tot[s.to] += tot[s.from]; tot[s.from] = 0; }
+    else if (s.p >= 0) tot[s.p] += s.v || 0;
+    return [tot[0], tot[1]];
+  });
+  const maxT = Math.max(10, Math.ceil(Math.max(tot[0], tot[1]) / 10) * 10);
+  const sy3 = v => T + ph - (v / maxT) * ph;
+  let tc = hLine(sy3(maxT / 2), true) + yLabel(sy3(maxT), maxT) + yLabel(sy3(maxT / 2), maxT / 2) + yLabel(sy3(0), 0) + xAxis;
+  for (const p of [0, 1]) {
+    let d = `M${sx(S[0].n)},${sy3(cum[0][p]).toFixed(1)}`;
+    for (let k = 1; k < S.length; k++) d += ` H${sx(S[k].n)} V${sy3(cum[k][p]).toFixed(1)}`;
+    tc += `<path d="${d}" fill="none" stroke="${pc(p)}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
+
+  const surges = [0, 0];
+  for (const s of S) if (s.surged) surges[s.p]++;
+
+  box.innerHTML =
+    `<h3>Energy after each piece</h3>` +
+    `<div class="legend"><span><i style="background:var(--red)"></i>${lab(0)}</span><span><i style="background:var(--blue)"></i>${lab(1)}</span><span><i style="background:var(--spark)"></i>Surge</span></div>` +
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Energy for each player after each piece">${en}</svg>` +
+    `<p class="note">Surges so far: Red ${surges[0]}, Blue ${surges[1]}. The dashed line is the surge value.</p>` +
+    `<h3>Total energy collected</h3>` +
+    `<div class="legend"><span><i style="background:var(--red)"></i>${lab(0)}: ${tot[0]}</span><span><i style="background:var(--blue)"></i>${lab(1)}: ${tot[1]}</span></div>` +
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Total energy collected by each player after each piece">${tc}</svg>` +
+    (isLocal() ? "" :
+    `<h3>AI’s estimated chance of winning<span>${latest}</span></h3>` +
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="AI win estimate after each of its moves">${wc}</svg>` +
+    `<p class="note">${pts.length ? "Each point is the AI’s estimate after one of its moves." : "The AI hasn’t moved yet."}</p>`);
+}
+
+function flash(p) {
+  const f = $("#flash");
+  f.style.setProperty("--fc", p === 0 ? "var(--red)" : "var(--blue)");
+  f.classList.remove("go"); void f.offsetWidth; f.classList.add("go");
+}
+
+function renderReplay() {
+  const M = moveCount(), box = $("#replay");
+  box.hidden = M === 0;
+  if (!M) return;
+  const k = viewStep === null ? M : viewStep, sc = $("#scrub");
+  sc.max = M; sc.value = k;
+  $("#scrubLbl").textContent = viewStep === null ? `Rewind (move ${M})` : `Move ${k} of ${M}`;
+  $("#btnLive").hidden = viewStep === null;
+  $("#btnFromHere").hidden = viewStep === null;
+  $("#btnGif").disabled = gifBusy || thinking;
+  $("#btnGif").hidden = viewStep !== null; // keep the bar to one or two rows while rewinding
+  $("#btnCopyRec2").hidden = viewStep !== null;
+}
+// Rewind the real game to the position being viewed and carry on from there.
+// The full game is saved first, so Undo brings it back.
+function playFromHere() {
+  if (viewStep === null) return;
+  const k = viewStep;
+  aiToken++; thinking = false;
+  history.push(snapshot());
+  if (game.result) {
+    // the finished game no longer stands, so take back its result as Undo would
+    if (game.result.humanWon) record.human--; else record.ai--;
+    if (game.result.delta) { settings.rollouts -= game.result.delta; saveSettings(); }
+    saveRecord(); game.result = null;
+  }
+  const moves = game.log.filter(L => L.cell != null && !L.swap).slice(0, k);
+  const st = { board: new Int8Array(geom.NN).fill(-1), e: game.stats[0].e.slice(), toMove: game.first, bonus: false, prevCell: -1, prevPlayer: -1 };
+  for (const m of moves) { applyMove(st, m.cell, rules); st.prevCell = m.cell; st.prevPlayer = m.p; }
+  const log = []; let cnt = 0;
+  for (const L of game.log) { if (L.cell != null && !L.swap) { if (cnt >= k) break; cnt++; } log.push(L); }
+  game.st = st; game.log = log; game.stats = game.stats.slice(0, k + 1); game.moveNo = k;
+  game.winner = -1; game.winGroup = null;
+  game.surgeStones = moves.filter(m => m.bonus).map(m => m.cell);
+  game.lastMoves = boardAt(k).lastMoves; game.lastPlayer = k ? moves[k - 1].p : -1;
+  viewStep = null;
+  render();
+  if (!isLocal() && game.st.toMove !== game.human) runAI();
+}
+function setView(k) {
+  const M = moveCount();
+  viewStep = k >= M ? null : Math.max(0, k);
+  renderBoard(); renderMeters(); renderStatus(); renderLog();
+}
+
+// ----- replay GIF -----
+// ----- Minimal GIF89a encoder (palette quantisation + LZW), no dependencies -----
+function buildPalette(frames) {
+  // frames: array of Uint8ClampedArray RGBA. Bucket colours at 5 bits per channel, keep the 256 most common.
+  const cnt = new Float64Array(32768), sr = new Float64Array(32768), sg = new Float64Array(32768), sb = new Float64Array(32768);
+  for (const px of frames) for (let i = 0; i < px.length; i += 4) {
+    const k = ((px[i] >> 3) << 10) | ((px[i + 1] >> 3) << 5) | (px[i + 2] >> 3);
+    cnt[k]++; sr[k] += px[i]; sg[k] += px[i + 1]; sb[k] += px[i + 2];
+  }
+  const used = [];
+  for (let k = 0; k < 32768; k++) if (cnt[k]) used.push(k);
+  used.sort((a, b) => cnt[b] - cnt[a]);
+  const pal = used.slice(0, 256).map(k => [Math.round(sr[k] / cnt[k]), Math.round(sg[k] / cnt[k]), Math.round(sb[k] / cnt[k])]);
+  while (pal.length < 256) pal.push([0, 0, 0]);
+  return pal;
+}
+function makeIndexer(pal) {
+  const cache = new Int16Array(32768).fill(-1);
+  return px => {
+    const out = new Uint8Array(px.length / 4);
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+      const k = ((px[i] >> 3) << 10) | ((px[i + 1] >> 3) << 5) | (px[i + 2] >> 3);
+      let idx = cache[k];
+      if (idx < 0) {
+        const r = (k >> 10) * 8 + 4, g = ((k >> 5) & 31) * 8 + 4, b = (k & 31) * 8 + 4;
+        let best = 0, bd = Infinity;
+        for (let p = 0; p < 256; p++) {
+          const dr = pal[p][0] - r, dg = pal[p][1] - g, db = pal[p][2] - b, d = dr * dr * 2 + dg * dg * 4 + db * db * 3;
+          if (d < bd) { bd = d; best = p; }
+        }
+        idx = cache[k] = best;
+      }
+      out[j] = idx;
+    }
+    return out;
+  };
+}
+function lzwInto(out, indices, minCodeSize) {
+  const clearCode = 1 << minCodeSize, eoi = clearCode + 1;
+  let codeSize = minCodeSize + 1, nextCode = eoi + 1, cur = 0, shift = 0;
+  const table = new Int32Array(1 << 20).fill(-1), used = [];
+  const bytes = [];
+  const emit = c => { cur |= c << shift; shift += codeSize; while (shift >= 8) { bytes.push(cur & 255); cur >>>= 8; shift -= 8; } };
+  emit(clearCode);
+  let prefix = indices[0];
+  for (let i = 1; i < indices.length; i++) {
+    const k = indices[i], key = (prefix << 8) | k, c = table[key];
+    if (c >= 0) { prefix = c; continue; }
+    emit(prefix);
+    if (nextCode === 4096) {
+      emit(clearCode);
+      for (const u of used) table[u] = -1;
+      used.length = 0; nextCode = eoi + 1; codeSize = minCodeSize + 1;
+    } else {
+      if (nextCode >= (1 << codeSize)) codeSize++;
+      table[key] = nextCode++; used.push(key);
+    }
+    prefix = k;
+  }
+  emit(prefix); emit(eoi);
+  if (shift > 0) bytes.push(cur & 255);
+  out.push(minCodeSize);
+  for (let i = 0; i < bytes.length; i += 255) {
+    const n = Math.min(255, bytes.length - i);
+    out.push(n);
+    for (let j = 0; j < n; j++) out.push(bytes[i + j]);
+  }
+  out.push(0);
+}
+function encodeGif(w, h, frames, delays) {
+  // frames: RGBA pixel arrays; delays in hundredths of a second. Returns Uint8Array.
+  const pal = buildPalette([frames[0], frames[frames.length - 1]]);
+  const toIdx = makeIndexer(pal);
+  const out = [];
+  const str = s => { for (let i = 0; i < s.length; i++) out.push(s.charCodeAt(i)); };
+  const u16 = v => { out.push(v & 255, (v >> 8) & 255); };
+  str("GIF89a"); u16(w); u16(h); out.push(0xF7, 0, 0);
+  for (const [r, g, b] of pal) out.push(r, g, b);
+  out.push(0x21, 0xFF, 0x0B); str("NETSCAPE2.0"); out.push(3, 1, 0, 0, 0); // loop forever
+  frames.forEach((px, f) => {
+    out.push(0x21, 0xF9, 4, 0x04); u16(delays[f]); out.push(0, 0);
+    out.push(0x2C); u16(0); u16(0); u16(w); u16(h); out.push(0);
+    lzwInto(out, toIdx(px), 8);
+  });
+  out.push(0x3B);
+  return new Uint8Array(out);
+}
+
+let gifBusy = false, gifBlob = null, gifUrl = null;
+const hexToRgb = h => { h = h.trim().replace("#", ""); if (h.length === 3) h = h.split("").map(c => c + c).join(""); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v * (1 - t) + b[i] * t));
+const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+function drawFrame(ctx, k, L) {
+  const { C, W, H, s, ox, oy, X, N } = L, V = boardAt(k), M = moveCount();
+  ctx.fillStyle = css(C.panel); ctx.fillRect(0, 0, W, H);
+  // energy bars
+  const mw = (W - 3 * 12) / 2;
+  for (const p of [0, 1]) {
+    const x0 = 12 + p * (mw + 12), y0 = 12, e = Math.min(V.e[p], X);
+    ctx.fillStyle = css(C.panel); ctx.strokeStyle = css(C.line); ctx.lineWidth = 1.5;
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, mw, 52, 9); else ctx.rect(x0, y0, mw, 52); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = css(p === 0 ? C.red : C.blue); ctx.beginPath(); ctx.arc(x0 + 16, y0 + 17, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = css(C.ink); ctx.font = "700 15px Barlow, Helvetica, Arial, sans-serif"; ctx.textBaseline = "middle";
+    ctx.fillText(playerName(p), x0 + 28, y0 + 18);
+    ctx.textAlign = "right"; ctx.font = "600 13px Barlow, Helvetica, Arial, sans-serif"; ctx.fillStyle = css(C.muted);
+    ctx.fillText(`${V.e[p]}/${X} energy`, x0 + mw - 10, y0 + 18); ctx.textAlign = "left";
+    const segs = Math.min(X, 30), gw = (mw - 20 - (segs - 1) * 2) / segs;
+    for (let q = 0; q < segs; q++) {
+      ctx.fillStyle = css(q < Math.round(e * segs / X) ? C.spark : C.line);
+      ctx.fillRect(x0 + 10 + q * (gw + 2), y0 + 34, gw, 9);
+    }
+  }
+  // board
+  const tr = ([x, y]) => [ox + x * s, oy + y * s];
+  const poly = (pts) => { ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
+  const span = Math.max(1, rules.max - rules.min);
+  for (let i = 0; i < geom.NN; i++) {
+    const r = (i / N) | 0, c = i % N, [cx, cy] = tr(center(r, c)), owner = V.board[i], v = rules.vals[i];
+    const t = ((v - rules.min) / span) * (owner < 0 ? 1 : 0.5);
+    poly([-90, -30, 30, 90, 150, 210].map(d => tr(vert(r, c, d, 0.95))));
+    ctx.fillStyle = css(mixRgb(C.cell, C.hot, t)); ctx.fill();
+    if (owner < 0) {
+      ctx.fillStyle = css(C.pip);
+      if (PIPS[v]) for (const [dx, dy] of PIPS[v]) { ctx.beginPath(); ctx.arc(cx + dx * R * 0.32 * s, cy + dy * R * 0.32 * s, R * 0.105 * s, 0, 7); ctx.fill(); }
+    } else {
+      ctx.beginPath(); ctx.arc(cx, cy, R * 0.7 * s, 0, 7); ctx.fillStyle = css(owner === 0 ? C.red : C.blue); ctx.fill();
+    }
+  }
+  // highlight the latest turn, or the winning chain on the final frame
+  const final = k === M && game.winner >= 0;
+  const marks = final ? (game.winGroup || []) : V.lastMoves;
+  for (const i of marks) {
+    const [cx, cy] = tr(center((i / N) | 0, i % N));
+    ctx.beginPath(); ctx.arc(cx, cy, R * (final ? 0.7 : 0.84) * s, 0, 7);
+    ctx.lineWidth = final ? 3 : 2; ctx.strokeStyle = css(final ? C.spark : C.ink);
+    ctx.setLineDash(final ? [] : [4, 3]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const edge = (pts, col) => { ctx.beginPath(); pts.map(tr).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.strokeStyle = css(col); ctx.lineWidth = R * 0.28 * s; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(); };
+  const top = [], bot = [], left = [], right = [];
+  for (let c = 0; c < N; c++) { top.push(vert(0, c, -150), vert(0, c, -90)); bot.push(vert(N - 1, c, 150), vert(N - 1, c, 90)); }
+  top.push(vert(0, N - 1, -30)); bot.push(vert(N - 1, N - 1, 30));
+  for (let r = 0; r < N; r++) { left.push(vert(r, 0, -150), vert(r, 0, 150)); right.push(vert(r, N - 1, -30), vert(r, N - 1, 30)); }
+  edge(top, C.red); edge(bot, C.red); edge(left, C.blue); edge(right, C.blue);
+  // caption
+  ctx.fillStyle = css(C.muted); ctx.font = "600 13px Barlow, Helvetica, Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  const moves = game.log.filter(Lg => Lg.cell != null && !Lg.swap), mv = moves[k - 1];
+  const cap = k === 0 ? "Surge Hex" : final ? `${COLOR_NAME[game.winner]} wins!` : `Move ${k}: ${COLOR_NAME[mv.p]} ${coord(mv.cell)}${mv.surged ? ", surge!" : mv.bonus ? ", extra piece" : ""}`;
+  ctx.fillText(cap, W / 2, H - 32);
+  ctx.font = "500 12px Barlow, Helvetica, Arial, sans-serif";
+  ctx.fillText(`Seed ${game.seed} \u00b7 ${isLocal() ? "two players" : `AI ${levelName(game.rollouts)} (${fmt(game.rollouts)} roll/move)`}`, W / 2, H - 12);
+  ctx.textAlign = "left";
+  // “Surge!” overlay on the frame where a surge happens, like the flash in the game
+  if (mv && mv.surged && !final) {
+    ctx.save();
+    ctx.font = "800 54px Unbounded, \"Arial Black\", Helvetica, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowColor = css(C.spark); ctx.shadowBlur = 18;
+    ctx.fillStyle = css(mv.p === 0 ? C.red : C.blue);
+    ctx.fillText("Surge!", W / 2, L.midY);
+    ctx.shadowBlur = 0; ctx.lineWidth = 2; ctx.strokeStyle = css(C.panel); ctx.strokeText("Surge!", W / 2, L.midY);
+    ctx.fillText("Surge!", W / 2, L.midY);
+    ctx.restore();
+  }
+}
+
+async function makeGif() {
+  const M = moveCount();
+  if (!M || gifBusy) return;
+  gifBusy = true; renderReplay();
+  const dlg = $("#gifDlg"), img = $("#gifImg"), msg = $("#gifMsg"), save = $("#btnGifSave");
+  img.hidden = true; save.disabled = true; msg.textContent = "Building the replay\u2026";
+  if (!dlg.open) dlg.showModal();
+  try {
+    const cs = getComputedStyle(document.documentElement), v = n => hexToRgb(cs.getPropertyValue(n));
+    const C = { panel: v("--panel"), cell: v("--cell"), hot: v("--hot"), pip: v("--pip"), red: v("--red"), blue: v("--blue"), spark: v("--spark"), ink: v("--ink"), muted: v("--muted"), line: v("--line") };
+    const N = geom.N;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [r, c] of [[0, 0], [0, N - 1], [N - 1, 0], [N - 1, N - 1]]) for (let d = -90; d < 270; d += 60) {
+      const [x, y] = vert(r, c, d); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+    const W = 420, pad = 16, s = (W - 2 * pad) / (maxX - minX), top = 76;
+    const H = Math.round(top + (maxY - minY) * s + pad + 46);
+    const L = { C, W, H, s, ox: pad - minX * s, oy: top - minY * s, X: rules.X, N, midY: top + ((maxY - minY) * s) / 2 };
+    const played = game.log.filter(Lg => Lg.cell != null && !Lg.swap);
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    const frames = [], delays = [];
+    for (let k = 0; k <= M; k++) {
+      drawFrame(ctx, k, L);
+      frames.push(ctx.getImageData(0, 0, W, H).data.slice());
+      delays.push(k === 0 ? 120 : k === M ? 400 : played[k - 1].surged ? 130 : 70);
+      if (k % 8 === 0) { msg.textContent = `Building the replay\u2026 ${Math.round((k / M) * 100)}%`; await nextTick(); }
+    }
+    msg.textContent = "Encoding the GIF\u2026"; await nextTick();
+    const bytes = encodeGif(W, H, frames, delays);
+    gifBlob = new Blob([bytes], { type: "image/gif" });
+    if (gifUrl) URL.revokeObjectURL(gifUrl);
+    gifUrl = URL.createObjectURL(gifBlob);
+    img.src = gifUrl; img.hidden = false; save.disabled = false;
+    msg.textContent = `${M} moves, ${(gifBlob.size / 1024 / 1024).toFixed(1)} MB.`;
+  } catch (e) {
+    msg.textContent = "Sorry, the GIF couldn\u2019t be made in this browser.";
+  }
+  gifBusy = false; renderReplay();
+}
+
+async function saveGif() {
+  if (!gifBlob) return;
+  const name = `surge-hex-replay-${new Date().toISOString().slice(0, 10)}.gif`, msg = $("#gifMsg");
+  // Inside claude.ai, files are saved through the viewer's downloads capability; elsewhere a normal download link works
+  let dl = null;
+  try { if (window.claude && typeof window.claude.use === "function") dl = await window.claude.use("downloads"); } catch (e) {}
+  if (dl) {
+    try { await dl.save({ filename: name, data: gifBlob }); msg.textContent = "Saved."; }
+    catch (e) { msg.textContent = e && e.code === "declined" ? "Not saved." : "Saving isn\u2019t available here. On a phone, you can press and hold the image to save it."; }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = gifUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function ruleText(E) {
+  const rn = { 2: "reset before", 1: "reset after", 0: "subtract" }[E.rule];
+  return `energy ${E.values} / surge at ${E.X} / ${rn} / 2nd player starts with ${E.p2start}${E.sym ? " / mirrored" : ""}`;
+}
+function gameRecordText() {
+  const moves = game.log.filter(L => L.cell != null && !L.swap).map(L => coord(L.cell));
+  const E = eff();
+  return [
+    "Surge Hex game record",
+    `Seed: ${game.seed}`,
+    `Board: ${geom.N}x${geom.N}`,
+    `First: ${COLOR_NAME[game.first]}`,
+    `Rules: ${settings.custom ? ruleText(E) : "standard"}`,
+    `Moves: ${moves.join(" ")}`
+  ].join("\n");
+}
+function renderSeedPanel() {
+  $("#seedVal").textContent = game.seed;
+  const t = gameRecordText();
+  if ($("#recOut").value !== t) $("#recOut").value = t;
+}
+function parseRecord(text) {
+  const t = text.trim();
+  if (!t) return { error: "Paste a seed or a game record first." };
+  if (!/[:\n]/.test(t)) {
+    const seed = normSeed(t);
+    if (!seed) return { error: "A seed is a whole number, such as 482913." };
+    return { seed };
+  }
+  const get = k => { const m = t.match(new RegExp("^\\s*" + k + "\\s*:\\s*(.*)$", "im")); return m ? m[1].trim() : null; };
+  const out = { seed: get("seed") };
+  if (!out.seed) return { error: "The record needs a \u201cSeed:\u201d line." };
+  out.seed = normSeed(out.seed);
+  if (!out.seed) return { error: "The \u201cSeed:\u201d line needs a whole number, such as 482913." };
+  const b = get("board");
+  if (b) { const m = b.match(/(\d+)/); const N = m ? +m[1] : NaN; if (!(N >= 5 && N <= 13)) return { error: "The board size must be between 5 and 13." }; out.N = N; }
+  const f = get("first");
+  if (f) out.first = /blue/i.test(f) ? 1 : 0;
+  const r = get("rules");
+  if (r && !/standard/i.test(r)) {
+    const en = r.match(/energy\s+([\d,\s]+?)(?:\/|$)/i), sx = r.match(/surge(?:\s+at)?\s+(\d+)/i), st = r.match(/starts?\s+with\s+(\d+)/i);
+    const vals = en ? parseValues(en[1]) : null;
+    if (!vals || !sx || !st) return { error: "The \u201cRules:\u201d line couldn\u2019t be read. Use \u201cstandard\u201d or copy it from a game record." };
+    out.custom = { values: vals.join(","), X: +sx[1], p2start: +st[1], rule: /subtract/i.test(r) ? 0 : /after/i.test(r) ? 1 : 2, sym: /mirror/i.test(r) };
+  } else if (r) out.custom = null;
+  const mi = t.search(/moves\s*:/i);
+  const mv = mi >= 0 ? t.slice(mi).replace(/^moves\s*:/i, "") : "";
+  out.moveText = mv.match(/\b[a-z]\d{1,2}\b/gi) || [];
+  return out;
+}
+function loadGameRecord() {
+  const err = $("#recErr"), rec = parseRecord($("#recIn").value);
+  err.textContent = "";
+  if (rec.error) { err.textContent = rec.error; return; }
+  if (rec.N) settings.N = rec.N;
+  if (rec.custom) settings = { ...settings, ...rec.custom, custom: true };
+  else if (rec.custom === null) settings.custom = false;
+  const N = settings.N, moves = [];
+  for (const m of rec.moveText || []) {
+    const c = m.toLowerCase().charCodeAt(0) - 97, r = parseInt(m.slice(1), 10) - 1;
+    if (c < 0 || c >= N || r < 0 || r >= N) { err.textContent = `The move \u201c${m}\u201d is off a ${N}\u00d7${N} board.`; return; }
+    moves.push(r * N + c);
+  }
+  if (new Set(moves).size !== moves.length) { err.textContent = "The record plays the same hexagon twice."; return; }
+  saveSettings();
+  nextGame = { seed: rec.seed, first: rec.first ?? (moves.length ? 0 : undefined), moves };
+  newGame();
+  $("#recIn").value = "";
+  document.querySelector(".board-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+async function copyText(text, okEl) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
+  if (!ok) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  okEl.textContent = ok ? "Copied." : "Couldn\u2019t copy here. Select the text and copy it yourself.";
+  setTimeout(() => { okEl.textContent = ""; }, 2500);
+  return ok;
+}
+
+function renderRecord() {
+  renderSeedPanel();
+  const seedSpan = `<span>Seed <b>${game.seed}</b></span>`;
+  if (isLocal()) { $("#record").innerHTML = `<span>Two players on this device. These games don\u2019t count toward your record against the AI.</span>${seedSpan}`; return; }
+  $("#record").innerHTML = `<span>AI <b>${levelName(settings.rollouts)}</b> (${fmt(settings.rollouts)} roll/move)${settings.adapt ? ", adapting" : ""}</span><span>Record vs AI: you <b>${record.human}</b> wins, AI <b>${record.ai}</b> wins</span>${seedSpan}`;
+}
+
+// ----- settings dialog -----
+function syncPreset() {
+  const v = String(Math.round(+$("#fRoll").value));
+  $("#fPreset").value = ["500", "3000", "12000", "40000"].includes(v) ? v : "";
+}
+function openSettings() {
+  const fN = $("#fN");
+  if (!fN.options.length) for (let n = 5; n <= 13; n++) fN.add(new Option(`${n} × ${n}`, n));
+  $("#fVals").value = settings.values; $("#fX").value = settings.X; fN.value = settings.N;
+  $("#fRule").value = settings.rule; $("#fFirst").value = settings.first;
+  $("#fMode").value = settings.mode; syncMode();
+  $("#fRoll").value = settings.rollouts; syncPreset(); $("#fAdapt").checked = settings.adapt;
+  $("#btnResetRecord").textContent = "Reset record";
+  $("#fP2").value = settings.p2start; $("#fSym").checked = settings.sym;
+  $("#fCustom").checked = settings.custom; syncCustom();
+  $("#fCoords").checked = settings.coords; $("#fOrient").value = settings.orient; $("#fTheme").value = settings.theme;
+  $("#fErr").textContent = "";
+  $("#dlg").showModal();
+  // Don't auto-focus the first field: on phones that pops up the keyboard
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+}
+function syncMode() {
+  const local = $("#fMode").value === "local", o = $("#fFirst").options;
+  $("#aiBox").hidden = local;
+  o[0].text = local ? "Red" : "You"; o[1].text = local ? "Blue" : "The AI";
+}
+function syncCustom() {
+  const on = $("#fCustom").checked;
+  $("#customBox").hidden = !on; $("#stdHint").hidden = on;
+}
+function applySettings() {
+  const rollouts = Math.round(+$("#fRoll").value);
+  if (!(rollouts >= 100 && rollouts <= 200000)) { $("#fErr").textContent = "Rollouts must be between 100 and 200,000."; return; }
+  const custom = $("#fCustom").checked;
+  // Custom rule values are only read (and checked) when custom rules are on; otherwise the saved ones are kept
+  let { values, X, rule, p2start, sym } = settings;
+  if (custom) {
+    const vals = parseValues($("#fVals").value);
+    if (!vals) { $("#fErr").textContent = "Energy values must be whole numbers from 0 to 9, separated by commas."; return; }
+    if (vals.every(v => v === 0)) { $("#fErr").textContent = "At least one energy value must be above 0."; return; }
+    X = Math.round(+$("#fX").value);
+    if (!(X >= 1 && X <= 99)) { $("#fErr").textContent = "Surge value must be between 1 and 99."; return; }
+    p2start = Math.round(+$("#fP2").value);
+    if (!(p2start >= 0 && p2start <= 99)) { $("#fErr").textContent = "Starting energy must be between 0 and 99."; return; }
+    values = vals.join(","); rule = +$("#fRule").value; sym = $("#fSym").checked;
+  }
+  settings = {
+    values, X, N: +$("#fN").value, rule, rollouts, adapt: $("#fAdapt").checked,
+    mode: $("#fMode").value, first: $("#fFirst").value, pie: false, p2start, sym, custom, coords: $("#fCoords").checked, orient: $("#fOrient").value, theme: $("#fTheme").value
+  };
+  saveSettings();
+  $("#dlg").close();
+  newGame();
+}
+
+function describeValues(vals) {
+  const u = [...new Set(vals)].sort((a, b) => a - b);
+  if (u.length === 1) return `${u[0]}`;
+  if (u.length > 4 && u.every((v, i) => i === 0 || v === u[i - 1] + 1)) return `${u[0]} to ${u[u.length - 1]}`;
+  return u.slice(0, -1).join(", ") + " or " + u[u.length - 1];
+}
+
+// Small example boards for the rules (same geometry as the main board)
+function miniBoard(N, red, blue, winner, label, opts = {}) {
+  const own = new Map();
+  red.forEach(([r, c]) => own.set(r * N + c, 0));
+  blue.forEach(([r, c]) => own.set(r * N + c, 1));
+  const chain = new Set((opts.chain || (winner === 0 ? red : winner === 1 ? blue : [])).map(([r, c]) => r * N + c));
+  const marks = (opts.marks || []).map(([r, c]) => r * N + c);
+  const hl = new Set((opts.hl || []).map(([r, c]) => r * N + c)); // empty hexagons to highlight
+  const val = opts.val; // optional (r, c) => energy, drawn on empty hexagons
+  let lo = Infinity, hi = -Infinity;
+  if (val) for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { lo = Math.min(lo, val(r, c)); hi = Math.max(hi, val(r, c)); }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [r, c] of [[0, 0], [0, N - 1], [N - 1, 0], [N - 1, N - 1]]) for (let d = -90; d < 270; d += 60) {
+    const [x, y] = vert(r, c, d);
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  const pad = R * 0.3, pts = a => a.map(p => p.map(n => n.toFixed(1)).join(",")).join(" ");
+  let s = "";
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const [x, y] = center(r, c), o = own.get(r * N + c);
+    if (o === undefined && val) {
+      const v = val(r, c), t = Math.round(((v - lo) / Math.max(1, hi - lo)) * 100);
+      s += `<polygon points="${hexPts(r, c, 0.95)}" style="fill:color-mix(in oklab, var(--hot) ${t}%, var(--cell))"/>`;
+      if (PIPS[v]) for (const [dx, dy] of PIPS[v]) s += `<circle cx="${(x + dx * R * 0.32).toFixed(1)}" cy="${(y + dy * R * 0.32).toFixed(1)}" r="${(R * 0.105).toFixed(1)}" fill="var(--pip)"/>`;
+    } else if (o === undefined && hl.has(r * N + c)) s += `<polygon points="${hexPts(r, c, 0.9)}" style="fill:color-mix(in oklab, var(--blue) 22%, var(--cell))" stroke="var(--blue)" stroke-width="2" stroke-dasharray="4 3"/>`;
+    else s += `<polygon points="${hexPts(r, c, 0.95)}" fill="var(--cell)"/>`;
+    if (o !== undefined) s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(R * 0.7).toFixed(1)}" fill="${o === 0 ? "var(--red)" : "var(--blue)"}"${chain.has(r * N + c) && o === winner ? ` stroke="var(--spark)" stroke-width="3"` : ""}/>`;
+  }
+  const top = [], bot = [], left = [], right = [];
+  for (let c = 0; c < N; c++) { top.push(vert(0, c, -150), vert(0, c, -90)); bot.push(vert(N - 1, c, 150), vert(N - 1, c, 90)); }
+  top.push(vert(0, N - 1, -30)); bot.push(vert(N - 1, N - 1, 30));
+  for (let r = 0; r < N; r++) { left.push(vert(r, 0, -150), vert(r, 0, 150)); right.push(vert(r, N - 1, -30), vert(r, N - 1, 30)); }
+  for (const m of marks) { const [x, y] = center((m / N) | 0, m % N); s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(R * 0.86).toFixed(1)}" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-dasharray="3 2.4"/>`; }
+  const line = (a, col) => `<polyline points="${pts(a)}" fill="none" stroke="${col}" stroke-width="${(R * 0.28).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  s += line(top, "var(--red)") + line(bot, "var(--red)") + line(left, "var(--blue)") + line(right, "var(--blue)");
+  return `<svg viewBox="${(minX - pad).toFixed(1)} ${(minY - pad).toFixed(1)} ${(maxX - minX + 2 * pad).toFixed(1)} ${(maxY - minY + 2 * pad).toFixed(1)}" role="img" aria-label="${label}">${s}</svg>`;
+}
+
+function energyPic(values) {
+  const u = [...new Set(values)].sort((a, b) => a - b).slice(0, 5);
+  const lo = u[0], span = Math.max(1, u[u.length - 1] - lo), gap = R * 2.5;
+  let s = "";
+  u.forEach((v, i) => {
+    const cx = i * gap, t = Math.round(((v - lo) / span) * 100);
+    const pts = [-60, 0, 60, 120, 180, 240].map(d => { const a = (d + ROT - 30) * Math.PI / 180; return `${(cx + R * 0.95 * Math.cos(a)).toFixed(1)},${(R * 0.95 * Math.sin(a)).toFixed(1)}`; }).join(" ");
+    s += `<polygon points="${pts}" style="fill:color-mix(in oklab, var(--hot) ${t}%, var(--cell))"/>`;
+    if (PIPS[v]) for (const [dx, dy] of PIPS[v]) s += `<circle cx="${(cx + dx * R * 0.32).toFixed(1)}" cy="${(dy * R * 0.32).toFixed(1)}" r="${(R * 0.105).toFixed(1)}" fill="var(--pip)"/>`;
+    else if (v > 0) s += `<text x="${cx}" y="0" text-anchor="middle" dominant-baseline="central" style="font:700 11px var(--ui);fill:var(--pip)">${v}</text>`;
+    s += `<text x="${cx}" y="${(R * 1.55).toFixed(1)}" text-anchor="middle" style="font:600 7.5px var(--ui);fill:var(--muted)">${v} energy</text>`;
+  });
+  const w = (u.length - 1) * gap + R * 2.4;
+  return `<svg viewBox="${(-R * 1.2).toFixed(1)} ${(-R * 1.1).toFixed(1)} ${w.toFixed(1)} ${(R * 3).toFixed(1)}" role="img" aria-label="Hexagons holding ${u.join(", ")} energy">${s}</svg>`;
+}
+
+function miniMeter(name, p, e, X) {
+  let bar;
+  if (X <= 30) { bar = `<div class="cells">`; for (let k = 0; k < X; k++) bar += `<i class="${k < e ? "on" : ""}"></i>`; bar += `</div>`; }
+  else bar = `<div class="bar"><b style="width:${Math.min(100, (e / X) * 100)}%"></b></div>`;
+  return `<div class="mm" style="--pc:${p === 0 ? "var(--red)" : "var(--blue)"}"><div class="who"><span class="chip"></span><span>${name}</span><span class="count">${e}<small>/${X} energy</small></span></div>${bar}</div>`;
+}
+
+function renderRules(E, values) {
+  ROT = pickOrientation(); // the example pictures follow the chosen hexagon shape
+  const diamond = ROT === 60, wide = ROT === -30;
+  const redWhere = diamond ? "on the upper right and lower left of the board" : wide ? "on the upper left and lower right of the board" : "at the top and bottom of the board";
+  const blueWhere = diamond ? "on the upper left and lower right" : wide ? "on the upper right and lower left" : "on the left and right";
+  const X = E.X, k = E.p2start;
+  const u = [...new Set(values)].sort((a, b) => a - b);
+  const v1 = u[u.length - 1], v2 = u[0];
+  const extra = "You <i>immediately get to play an extra piece</i>";
+  const surge = E.rule === 2
+    ? `When your energy reaches ${X} or more, you <b>surge</b>. ${extra}, and your energy resets to 0.`
+    : E.rule === 1
+    ? `When your energy reaches ${X} or more, you <b>surge</b>. ${extra}. After it, your energy resets to 0.`
+    : `When your energy reaches ${X} or more, you <b>surge</b>. ${extra}, and ${X} is taken off your energy. Any energy above ${X} is kept.`;
+
+  // Surge example: Red is close to a surge and uses two pieces in a row to cut through Blue's bridge
+  // Red overshoots the surge value by 1, to show that a surge can use more than the surge value
+  const redBefore = Math.max(0, X - v1 + (v1 >= 2 ? 1 : 0)), blueE = Math.min(X - 1, Math.round(X * 0.4));
+  const total = redBefore + v1;
+  let e = redBefore + v1;
+  e = E.rule === RULE_SUB ? e - X : 0;
+  const redAfter = Math.min(X, E.rule === RULE_ZERO_AFTER ? 0 : e + v2);
+  const pat = (r, c) => (r === 1 && c === 2 ? v1 : r === 2 && c === 1 ? v2 : u[(r * 2 + c) % u.length]);
+  const blueEx = [[1, 0], [1, 1], [2, 2], [2, 3], [2, 4]], redEx = [[0, 2], [3, 1], [4, 1], [3, 4]];
+  const cut = [[1, 2], [2, 1]];
+  const exBefore = miniBoard(5, redEx, blueEx, null, "Before: Blue has a bridge in the middle and Red is close to a surge", { val: pat });
+  const exAfter = miniBoard(5, redEx.concat(cut), blueEx, 0, "After: Red has placed two pieces in a row, cutting the bridge", { val: pat, marks: cut, chain: [[0, 2], [1, 2], [2, 1], [3, 1], [4, 1]] });
+
+  // Each example has a couple of the winner's pieces off the winning path, so the gold outline clearly marks the path
+  const redPath = [[0, 3], [1, 2], [2, 2], [3, 1], [4, 1]], bluePath = [[2, 0], [2, 1], [1, 2], [1, 3], [1, 4]];
+  const redWin = miniBoard(5, redPath.concat([[1, 3], [4, 3]]), [[0, 1], [1, 1], [2, 3], [3, 3], [1, 4], [3, 2]], 0, "Example: Red wins with a chain from top to bottom", { chain: redPath });
+  const blueWin = miniBoard(5, [[0, 2], [2, 2], [3, 2], [3, 1], [0, 4], [4, 4]], bluePath.concat([[3, 0], [3, 3]]), 1, "Example: Blue wins with a chain from left to right", { chain: bluePath });
+  $("#rulesText").innerHTML =
+    `<h4>Object of the Game</h4>` +
+    `<p>Two players <i>take turns placing one piece</i> of their colour on an empty hexagon (<i>click a hexagon</i> to place your piece). Pieces cannot move once placed.</p>` +
+    `<p>Red wins by making an unbroken chain of red pieces that <i>joins the two red edges</i>, ${redWhere}. Blue wins by making a chain that <i>joins the two blue edges</i>, ${blueWhere}.</p>` +
+    `<div class="pics"><figure>${redWin}<figcaption>Example: Red wins</figcaption></figure><figure>${blueWin}<figcaption>Example: Blue wins</figcaption></figure></div>` +
+    `<p>So far, this is just like the classic game <a href="https://en.wikipedia.org/wiki/Hex_(board_game)" target="_blank" rel="noopener">Hex</a>. The twist in Surge Hex is <i>energy and surge moves</i>.</p>` +
+
+    `<h4>Energy</h4>` +
+    `<p>Every hexagon holds ${describeValues(values)} energy, which is randomized at the start of each game. The dots show how much energy is on each hexagon.</p>` +
+    `<figure class="single">${energyPic(values)}</figure>` +
+    `<p>When you place a piece, <i>you collect the energy on that hexagon</i>. Your energy is shown in the bars at the top.</p>` +
+    `<div class="mm-pair">${miniMeter("Red", 0, 0, X)}${miniMeter("Blue", 1, k, X)}</div>` +
+    (k > 0
+      ? `<p>To offset the advantage of moving first, the 2nd player <i>starts the game with ${k} energy</i>.</p>`
+      : `<p>Both players start with 0 energy.</p>`) +
+
+    `<h4>Surge (Extra Move for ≥${X} Energy)</h4>` +
+    `<p>${surge}</p>` +
+    `<p><b>Example:</b> Red has ${redBefore} energy and plays on a ${v1}-energy hexagon, reaching ${total}. ${
+      E.rule === RULE_ZERO_AFTER
+        ? `Red surges and plays one extra piece on a ${v2}-energy hexagon. Then Red’s energy resets to 0.`
+        : E.rule === RULE_SUB
+        ? `Red surges, using up ${X} energy and keeping ${total - X}, and plays one extra piece on a ${v2}-energy hexagon.`
+        : `Red surges, using up all ${total} energy, and plays one extra piece on a ${v2}-energy hexagon.`
+    }</p>` +
+    `<div class="surge-ex">` +
+      `<figure><figcaption>Before: Red to move</figcaption>${miniMeter("Red", 0, redBefore, X)}${miniMeter("Blue", 1, blueE, X)}${exBefore}</figure>` +
+      `<figure><figcaption>After: Red moved twice</figcaption>${miniMeter("Red", 0, redAfter, X)}${miniMeter("Blue", 1, blueE, X)}${exAfter}</figure>` +
+    `</div>` +
+    `<p>Surging is <i>not optional</i>. ${E.rule === RULE_ZERO_AFTER ? "The extra piece does not add to your energy, because your energy resets after it." : "The extra piece collects energy as normal."}</p>` +
+    `<details class="tips"><summary>Surge Strategy Tips</summary>` +
+    `<p>In the example, Blue’s two middle pieces form a <a href="https://www.mseymour.ca/hex_book/hexstrat1.html#section_5" target="_blank" rel="noopener">bridge</a>. A bridge is normally safe, because if Red takes one of the two empty hexagons, Blue just takes the other. Without surges, Blue’s chain could not be stopped, and Blue would be winning this position.</p>` +
+    `<div class="pics">` +
+      `<figure>${miniBoard(5, redEx, blueEx, null, "Blue’s bridge, with the two shared empty hexagons marked", { hl: cut })}<figcaption>Blue’s bridge. Both marked hexagons touch the two blue pieces.</figcaption></figure>` +
+      `<figure>${miniBoard(5, redEx.concat([[1, 2]]), blueEx.concat([[2, 1]]), 1, "Red takes one bridge hexagon and Blue takes the other", { marks: cut, chain: [[1, 0], [1, 1], [2, 1], [2, 2], [2, 3], [2, 4]] })}<figcaption>If Red takes one, Blue takes the other and stays connected.</figcaption></figure>` +
+    `</div>` +
+    `<p>The surge changes the outcome. By surging, Red takes both hexagons before Blue can answer, cuts the bridge and wins. In other words, surges <i>break the if-you-go-here-I-go-there logic</i> of classic Hex, so it’s important to keep an eye on energy levels and plan for surges.</p>` +
+    `</details>` +
+    (E.custom ? `<p><b>Custom rules are on.</b> Turn off “Customize rules” in Settings to go back to the standard game.</p>` : "");
+}
+
+let lastRot = null;
+new ResizeObserver(() => { if (!game) return; const r = pickOrientation(); if (r !== lastRot) { lastRot = r; renderBoard(); } }).observe(document.querySelector(".board-wrap"));
+$("#board").addEventListener("click", e => { const g = e.target.closest("[data-i]"); if (g) onCell(+g.dataset.i); });
+$("#btnNew").addEventListener("click", () => newGame());
+$("#btnCopySeed").addEventListener("click", () => copyText(game.seed, $("#seedOk")));
+$("#btnCopyRec").addEventListener("click", () => copyRecord($("#recOk")));
+$("#btnCopyRec2").addEventListener("click", () => copyRecord($("#recOk2")));
+async function copyRecord(okEl) {
+  // if the clipboard is blocked, show the record in the moves section so it can be copied by hand
+  if (!(await copyText(gameRecordText(), okEl))) {
+    const ta = $("#recOut"); ta.closest("details").open = true; ta.hidden = false;
+    ta.scrollIntoView({ block: "center" }); ta.focus(); ta.select();
+  }
+}
+$("#btnLoad").addEventListener("click", loadGameRecord);
+$("#btnUndo").addEventListener("click", onUndo);
+$("#btnSwap").addEventListener("click", onSwap);
+$("#btnSettings").addEventListener("click", openSettings);
+$("#btnCancel").addEventListener("click", () => $("#dlg").close());
+$("#btnStart").addEventListener("click", applySettings);
+$("#fMode").addEventListener("change", syncMode);
+$("#scrub").addEventListener("input", e => setView(+e.target.value));
+$("#btnLive").addEventListener("click", () => setView(Infinity));
+$("#btnFromHere").addEventListener("click", playFromHere);
+$("#log").addEventListener("click", e => { const li = e.target.closest("[data-step]"); if (li) setView(+li.dataset.step); });
+$("#btnGif").addEventListener("click", makeGif);
+$("#btnGifSave").addEventListener("click", saveGif);
+$("#btnGifClose").addEventListener("click", () => $("#gifDlg").close());
+$("#fPreset").addEventListener("change", e => { if (e.target.value) $("#fRoll").value = e.target.value; });
+$("#fRoll").addEventListener("input", syncPreset);
+$("#fCustom").addEventListener("change", syncCustom);
+// The rules start open; if someone collapses them, keep them collapsed on later visits
+try { if (localStorage.getItem("surgehex-howto") === "closed") $("#howtoBox").open = false; } catch (e) {}
+$("#howtoBox").addEventListener("toggle", e => { try { localStorage.setItem("surgehex-howto", e.target.open ? "open" : "closed"); } catch (err) {} });
+// Coordinates are a display preference, so they apply straight away without a new game
+$("#fCoords").addEventListener("change", e => { settings.coords = e.target.checked; saveSettings(); renderBoard(); renderLog(); });
+// Hexagon shape is a display preference too: redraw the board and the rule pictures straight away
+$("#fOrient").addEventListener("change", e => {
+  settings.orient = e.target.value; saveSettings();
+  const E = eff(); renderRules(E, parseValues(E.values) || [1, 2, 3]); renderBoard();
+});
+// Colour theme: dark by default, light, or follow the device. It applies straight away.
+function applyTheme() {
+  const t = settings.theme || "dark", root = document.documentElement;
+  if (t === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
+}
+applyTheme();
+// If the page host changes the theme attribute, keep the player's chosen theme
+new MutationObserver(() => {
+  const t = settings.theme || "dark";
+  if (t !== "system" && document.documentElement.getAttribute("data-theme") !== t) applyTheme();
+}).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+$("#fTheme").addEventListener("change", e => { settings.theme = e.target.value; saveSettings(); applyTheme(); });
+$("#btnResetRecord").addEventListener("click", e => {
+  record.human = 0; record.ai = 0; saveRecord(); renderRecord();
+  e.target.textContent = "Record cleared";
+});
+
+newGame();
+</script>
+</body>
+</html>
