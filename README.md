@@ -74,12 +74,6 @@ A surge changes that. A player who surges can take both hexagons before the othe
 - **Board options:** board sizes from 5×5 to 13×13, four board orientations, optional coordinates, and dark or light colours.
 - **Custom rules** for energy values, the surge value, the 2nd player's starting energy and how surges use energy.
 
-## Balancing the first move
-
-In Hex, moving first is a big advantage. Moving first means that after each of your turns you are one piece ahead, and after your opponent's turn you are level. On average, that is about half a move.
-
-In Surge Hex, 10 energy buys one extra move, so 5 energy is worth about half a move. That makes 5 the natural amount for the 2nd player to start with. Simulations of the AI playing against itself on a 9×9 board agree with this. Without any starting energy, the first player won about two-thirds of the games. The starting energy that made the games even came out between about 5 and 7, so 5 is a simple and reasonable choice.
-
 ## How the AI works
 
 The AI chooses its moves with a method called *Monte Carlo tree search* (MCTS). To decide on a move, the AI plays many quick practice games against itself, starting from the current position. In these practice games, the moves are mostly chosen at random. Each practice game is called a *rollout*. Rollouts follow the full rules of Surge Hex, including energy and surges.
@@ -130,7 +124,7 @@ Moves: e5 d7 f3 c4
 
 ## Running it yourself
 
-The whole game is a single file, `index.html`, with no build step and nothing to install. Open it in a web browser to play. The only outside resource is a pair of fonts from Google Fonts, and the game still works without them.
+The whole game is a single file, `index.html`, with nothing to install. Open it in a web browser to play. 
 
 ## AI disclosure
 
