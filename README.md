@@ -6,6 +6,10 @@ Surge Hex is an abstract two-player connection game based on the classic game [H
 
 You can play against an AI opponent or against another person on the same device.
 
+<p align="center">
+  <img src="images/replay.gif" width="320" alt="Animated replay of a Surge Hex game, showing pieces being placed and surges happening">
+</p>
+
 ## How to play
 
 ### Object of the Game
@@ -14,13 +18,25 @@ Two players *take turns placing one piece* of their colour on an empty hexagon. 
 
 Red wins by making an unbroken chain of red pieces that *joins the two red edges*, at the top and bottom of the board. Blue wins by making a chain that *joins the two blue edges*, on the left and right.
 
+<p align="center">
+  <img src="images/win-examples.png" width="460" alt="Two example boards. Red wins with a chain from the top edge to the bottom edge. Blue wins with a chain from the left edge to the right edge. The winning chains are outlined in gold.">
+</p>
+
 So far, this is just like the classic game Hex. The twist in Surge Hex is *energy and surge moves*.
 
 ### Energy
 
 Every hexagon holds 1, 2 or 3 energy, which is randomized at the start of each game. The dots show how much energy is on each hexagon.
 
+<p align="center">
+  <img src="images/energy.png" width="280" alt="Three hexagons holding 1, 2 and 3 energy, shown as dots">
+</p>
+
 When you place a piece, *you collect the energy on that hexagon*. Your energy is shown in the bars at the top.
+
+<p align="center">
+  <img src="images/energy-bars.png" width="360" alt="The energy bars at the start of a game: Red has 0 out of 10 energy and Blue has 5 out of 10">
+</p>
 
 To offset the advantage of moving first, the 2nd player *starts the game with 5 energy*.
 
@@ -30,15 +46,25 @@ When your energy reaches 10 or more, you **surge**. You *immediately get to play
 
 **Example:** Red has 8 energy and plays on a 3-energy hexagon, reaching 11. Red surges, using up all 11 energy, and plays one extra piece on a 1-energy hexagon.
 
+<p align="center">
+  <img src="images/surge-example.png" width="460" alt="Before and after a surge. Before, Red has 8 energy and Blue has a bridge in the middle of the board. After, Red has placed two pieces in a row on both of the bridge's empty hexagons and connected Red's edges.">
+</p>
+
 Surging is *not optional*. The extra piece collects energy as normal.
 
 ### Surge Strategy Tips
 
 In classic Hex, two pieces of the same colour form a [bridge](https://www.mseymour.ca/hex_book/hexstrat1.html#section_5) when there are two empty hexagons between them that both touch both pieces. A bridge is normally safe, because if the opponent takes one of the two empty hexagons, the bridge's owner just takes the other.
 
+<p align="center">
+  <img src="images/bridge.png" width="460" alt="Blue's bridge from the example, with its two shared empty hexagons marked. Next to it, Red takes one of those hexagons and Blue takes the other, so Blue stays connected.">
+</p>
+
 A surge changes that. A player who surges can take both hexagons before the other player can answer, which cuts the bridge. In other words, surges *break the if-you-go-here-I-go-there logic* of classic Hex, so it's important to keep an eye on energy levels and plan for surges.
 
 ## Features
+
+![Surge Hex in a web browser, partway through a game](images/screenshot.png)
 
 - **Play against the AI** at any strength, from Easy to Very hard. You can also set an exact number of rollouts per move, or let the difficulty adapt as you win and lose.
 - **Play with a friend** on the same device.
