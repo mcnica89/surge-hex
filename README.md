@@ -1,6 +1,6 @@
 # Surge Hex
 
-Surge Hex is a two-player connection game based on the classic game [Hex](https://en.wikipedia.org/wiki/Hex_(board_game)). It adds one twist. Every hexagon holds some energy, and collecting enough energy lets you play two pieces in a row.
+Surge Hex is an abstract two-player connection game based on the classic game [Hex](https://en.wikipedia.org/wiki/Hex_(board_game)). The twist is that every hexagon holds some energy, and collecting enough energy lets you play two pieces in a row.
 
 **Play it here: https://mcnica89.github.io/surge-hex/**
 
