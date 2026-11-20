@@ -4,11 +4,17 @@ Surge Hex is an abstract two-player connection game based on the classic game [H
 
 **Play it here: https://mcnica89.github.io/surge-hex/**
 
-You can play against an AI opponent or against another person on the same device.
-
 <p align="center">
   <img src="images/replay.gif" width="320" alt="Animated replay of a Surge Hex game, showing pieces being placed and surges happening">
 </p>
+
+## TL;DR How to play Surge Hex
+
+- Take turns placing pieces (*click a hexagon*). Connect the two edges that match your colour to win (red connects top to bottom, blue connects left to right).
+- Each hexagon holds 1, 2 or 3 energy (the dots). Placing a piece *collects that energy*. Energy is shown in the bars on top (1st player starts at 0, 2nd player starts at 5).
+- At 10 or more energy, you **surge**. Your energy resets to 0 and *you immediately play an extra piece*.
+
+See [How to play](#how-to-play) below for details and examples.
 
 ## How to play
 
