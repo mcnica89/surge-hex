@@ -183,6 +183,10 @@ main > * { min-width: 0; } /* let wide content (the code sample) scroll inside i
 .rules { font-size: .94rem; color: var(--ink); padding-bottom: 10px; }
 .howto { background: var(--panel); border: 1.5px solid var(--line); border-radius: 12px; padding: 4px 12px; margin-bottom: 14px; }
 .howto summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.howto details + details { border-top: 1px solid var(--line); }
+.tldr ul { margin: 0 0 8px; padding-left: 1.2em; }
+.tldr li { margin: 0 0 4px; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 2px; cursor: pointer; }
 .rules a { color: inherit; text-decoration-thickness: 1.5px; text-underline-offset: 2px; }
 .rules h4 { margin: 14px 0 4px; font: 700 1rem/1.3 var(--ui); }
 .rules h4:first-child { margin-top: 4px; }
@@ -250,8 +254,12 @@ dialog h2 { font: 700 1.15rem var(--display); margin: 0; }
 <body>
 <div class="wrap">
   <section class="howto">
-    <details id="howtoBox" open>
-      <summary>How to play Surge Hex</summary>
+    <details id="tldrBox" open>
+      <summary>TL;DR How to play Surge Hex</summary>
+      <div class="rules tldr" id="tldrText"></div>
+    </details>
+    <details id="howtoBox">
+      <summary>Full rules</summary>
       <div class="rules" id="rulesText"></div>
     </details>
   </section>
@@ -1698,6 +1706,20 @@ function renderRules(E, values) {
   const redPath = [[0, 3], [1, 2], [2, 2], [3, 1], [4, 1]], bluePath = [[2, 0], [2, 1], [1, 2], [1, 3], [1, 4]];
   const redWin = miniBoard(5, redPath.concat([[1, 3], [4, 3]]), [[0, 1], [1, 1], [2, 3], [3, 3], [1, 4], [3, 2]], 0, "Example: Red wins with a chain from top to bottom", { chain: redPath });
   const blueWin = miniBoard(5, [[0, 2], [2, 2], [3, 2], [3, 1], [0, 4], [4, 4]], bluePath.concat([[3, 0], [3, 3]]), 1, "Example: Blue wins with a chain from left to right", { chain: bluePath });
+  // The short version: open by default, so new players see this instead of the full rules
+  const tldrSurge = E.rule === 2
+    ? "Your energy resets to 0 and <i>you immediately play an extra piece</i>."
+    : E.rule === 1
+    ? "<i>You immediately play an extra piece</i>, then your energy resets to 0."
+    : `<i>You immediately play an extra piece</i>, and ${X} energy is used up.`;
+  $("#tldrText").innerHTML =
+    `<ul>` +
+    `<li>Take turns placing pieces (<i>click a hexagon</i>). Connect the two edges that match your colour to win (${diamond ? "red connects upper right to lower left, blue connects upper left to lower right" : wide ? "red connects upper left to lower right, blue connects upper right to lower left" : "red connects top to bottom, blue connects left to right"}).</li>` +
+    `<li>Each hexagon holds ${describeValues(values)} energy (the dots). Placing a piece <i>collects that energy</i>. Energy is shown in the bars on top (${k > 0 ? `1st player starts at 0, 2nd player starts at ${k}` : "both players start at 0"}).</li>` +
+    `<li>At ${X} or more energy, you <b>surge</b>. ${tldrSurge}</li>` +
+    `</ul>` +
+    `<p><button class="linkbtn" type="button" id="openRules">Open the full rules</button> for details and examples.</p>`;
+  $("#openRules").onclick = () => { const r = $("#howtoBox"); r.open = true; r.scrollIntoView({ behavior: "smooth", block: "start" }); };
   $("#rulesText").innerHTML =
     `<h4>Object of the Game</h4>` +
     `<p>Two players <i>take turns placing one piece</i> of their colour on an empty hexagon (<i>click a hexagon</i> to place your piece). Pieces cannot move once placed.</p>` +
@@ -1770,9 +1792,9 @@ $("#btnGifClose").addEventListener("click", () => $("#gifDlg").close());
 $("#fPreset").addEventListener("change", e => { if (e.target.value) $("#fRoll").value = e.target.value; });
 $("#fRoll").addEventListener("input", syncPreset);
 $("#fCustom").addEventListener("change", syncCustom);
-// The rules start open; if someone collapses them, keep them collapsed on later visits
-try { if (localStorage.getItem("surgehex-howto") === "closed") $("#howtoBox").open = false; } catch (e) {}
-$("#howtoBox").addEventListener("toggle", e => { try { localStorage.setItem("surgehex-howto", e.target.open ? "open" : "closed"); } catch (err) {} });
+// The short rules start open and the full rules start closed. If someone collapses the short rules, keep them collapsed on later visits.
+try { if (localStorage.getItem("surgehex-tldr") === "closed") $("#tldrBox").open = false; } catch (e) {}
+$("#tldrBox").addEventListener("toggle", e => { try { localStorage.setItem("surgehex-tldr", e.target.open ? "open" : "closed"); } catch (err) {} });
 // Coordinates are a display preference, so they apply straight away without a new game
 $("#fCoords").addEventListener("change", e => { settings.coords = e.target.checked; saveSettings(); renderBoard(); renderLog(); });
 // Hexagon shape is a display preference too: redraw the board and the rule pictures straight away
